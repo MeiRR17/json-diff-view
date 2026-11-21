@@ -17,12 +17,15 @@ const patchSource = document.querySelector('#patch-source');
 const patchResult = document.querySelector('#patch-result');
 const patchStatus = document.querySelector('#patch-status');
 const useGeneratedButton = document.querySelector('#use-generated');
+const importPatchButton = document.querySelector('#import-patch');
+const patchFile = document.querySelector('#patch-file');
 const sendResultButton = document.querySelector('#send-result');
 const downloadResultButton = document.querySelector('#download-result');
 
 let latestReport = null;
 let latestPatch = null;
 let lastApplied = null;
+let patchImportSequence = 0;
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -200,6 +203,7 @@ document.querySelector('#clear').addEventListener('click', () => {
   beforeEditor.value = '';
   afterEditor.value = '';
   patchSource.value = '';
+  patchImportSequence++;
   resetReport();
   setStatus('Editors cleared.');
   beforeEditor.focus();
@@ -296,8 +300,44 @@ function previewPatch() {
     patchMessage(error instanceof Error ? error.message : 'Unable to apply JSON Patch.', true);
   }
 }
+importPatchButton.addEventListener('click', () => patchFile.click());
+patchFile.addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  const request = ++patchImportSequence;
+  if (file.size > MAX_BYTES) {
+    patchMessage('Patch file exceeds the 2 MiB import limit.', true);
+    return;
+  }
+  try {
+    const contents = await file.text();
+    if (request !== patchImportSequence) return;
+    fitInput(contents, 'JSON Patch file');
+    const operations = parseJson(contents, 'JSON Patch file');
+    if (!Array.isArray(operations)) {
+      throw new TypeError('JSON Patch file must contain an array of operations.');
+    }
+    if (operations.length > 5000) {
+      throw new RangeError('Patch exceeds the 5,000 operation limit.');
+    }
+    // Never replace user-edited patch text without explicit confirmation.
+    if (patchSource.value.trim() && patchSource.value !== contents &&
+        !confirm('Replace the patch currently in the editor with the imported file?')) return;
+    if (request !== patchImportSequence) return;
+    patchSource.value = contents;
+    invalidatePatchResult();
+    patchMessage('Local patch file loaded. Select Preview applying patch to inspect the result.');
+  } catch (error) {
+    if (request === patchImportSequence) {
+      patchMessage(error instanceof Error ? error.message : 'Could not read JSON Patch file.', true);
+    }
+  }
+});
+
 document.querySelector('#preview-patch').addEventListener('click', previewPatch);
 patchSource.addEventListener('input', () => {
+  patchImportSequence++;
   invalidatePatchResult();
   patchMessage('Patch text changed. Preview again before using the result.');
 });
