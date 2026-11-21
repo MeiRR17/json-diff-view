@@ -194,3 +194,11 @@ a{color:#155a98}
 .range-patch-status{font-size:.84rem;color:#3d5471;margin:7px 0 14px;overflow-wrap:anywhere}
 @media(max-width:700px){.range-patch-export label{width:100%}.range-patch-export .button{flex:1 1 170px}}
 @media(prefers-color-scheme:dark){.range-patch-export label,.range-patch-status{color:#b6cce3}.range-patch-export input{accent-color:#76c6ff}}
+
+/* Portable start/end checkpoint documents for checkpoint-range patches. */
+.range-checkpoint-exports{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 10px}
+.checkpoint-export-group{display:flex;flex-wrap:wrap;align-content:start;align-items:center;gap:8px;padding:12px;border:1px solid #d8e1ed;border-radius:9px;background:rgba(255,255,255,.62)}
+.checkpoint-export-title{flex:1 1 100%;font-size:.85rem;font-weight:700;color:#3d5471}
+.checkpoint-export-group .button{font-size:.81rem;padding:8px 10px}
+@media(max-width:720px){.range-checkpoint-exports{grid-template-columns:1fr}.checkpoint-export-group .button{flex:1 1 140px}}
+@media(prefers-color-scheme:dark){.checkpoint-export-group{background:#19293b;border-color:#3b5068}.checkpoint-export-title{color:#b6cce3}}

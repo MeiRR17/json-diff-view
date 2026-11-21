@@ -99,6 +99,10 @@ const guardRangePatchCheckbox = document.querySelector('#range-guard-patch');
 const rangePatchStatus = document.querySelector('#range-patch-status');
 const copyRangePatchButton = document.querySelector('#copy-range-patch');
 const downloadRangePatchButton = document.querySelector('#download-range-patch');
+const copyRangeStartButton = document.querySelector('#copy-range-start');
+const downloadRangeStartButton = document.querySelector('#download-range-start');
+const copyRangeEndButton = document.querySelector('#copy-range-end');
+const downloadRangeEndButton = document.querySelector('#download-range-end');
 
 let latestReport = null;
 let currentPage = 0;
@@ -246,6 +250,10 @@ function invalidateRange(message = 'Choose two steps to compare their cumulative
   downloadRangeCsvButton.disabled = true;
   copyRangePatchButton.disabled = true;
   downloadRangePatchButton.disabled = true;
+  copyRangeStartButton.disabled = true;
+  downloadRangeStartButton.disabled = true;
+  copyRangeEndButton.disabled = true;
+  downloadRangeEndButton.disabled = true;
   rangePatchStatus.textContent = '';
   rangeMessage(message);
 }
@@ -269,6 +277,64 @@ function rangeSource(snapshot) {
   return patchSideLabel(snapshot.source) + ': step ' +
     snapshot.start + ' → step ' + snapshot.end;
 }
+function serializeRangeCheckpoint(snapshot, endpoint) {
+  const value = endpoint === 'start' ? snapshot.before : snapshot.after;
+  const pretty = JSON.stringify(value, null, 2);
+  try {
+    fitInput(pretty, 'Checkpoint JSON');
+    return pretty;
+  } catch (error) {
+    // Pretty printing can expand otherwise valid JSON beyond the 2 MiB
+    // editor/import cap. Fall back to compact JSON rather than exporting an
+    // unusable document.
+    const compact = JSON.stringify(value);
+    fitInput(compact, 'Checkpoint JSON');
+    return compact;
+  }
+}
+function rangeCheckpointFilename(snapshot, endpoint) {
+  const number = endpoint === 'start' ? snapshot.start : snapshot.end;
+  return 'patch-' + snapshot.source + '-checkpoint-step-' + number + '.json';
+}
+function enableRangeCheckpoints(enabled) {
+  copyRangeStartButton.disabled = !enabled;
+  downloadRangeStartButton.disabled = !enabled;
+  copyRangeEndButton.disabled = !enabled;
+  downloadRangeEndButton.disabled = !enabled;
+}
+async function copyRangeCheckpoint(endpoint) {
+  const snapshot = currentRange();
+  if (!snapshot) return;
+  try {
+    await navigator.clipboard.writeText(serializeRangeCheckpoint(snapshot, endpoint));
+    rangeMessage('Checkpoint step ' +
+      (endpoint === 'start' ? snapshot.start : snapshot.end) +
+      ' copied as standalone JSON. No editor content changed.');
+  } catch (error) {
+    rangeMessage('Unable to copy checkpoint JSON: ' +
+      (error instanceof Error ? error.message : 'clipboard unavailable'), true);
+  }
+}
+function downloadRangeCheckpoint(endpoint) {
+  const snapshot = currentRange();
+  if (!snapshot) return;
+  try {
+    downloadReport(serializeRangeCheckpoint(snapshot, endpoint),
+      rangeCheckpointFilename(snapshot, endpoint),
+      'application/json;charset=utf-8');
+    rangeMessage('Checkpoint step ' +
+      (endpoint === 'start' ? snapshot.start : snapshot.end) +
+      ' downloaded. Use the starting checkpoint as the base for a range patch.');
+  } catch (error) {
+    rangeMessage('Checkpoint download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+copyRangeStartButton.addEventListener('click', () => { void copyRangeCheckpoint('start'); });
+downloadRangeStartButton.addEventListener('click', () => downloadRangeCheckpoint('start'));
+copyRangeEndButton.addEventListener('click', () => { void copyRangeCheckpoint('end'); });
+downloadRangeEndButton.addEventListener('click', () => downloadRangeCheckpoint('end'));
+
 function refreshRangePatch() {
   copyRangePatchButton.disabled = true;
   downloadRangePatchButton.disabled = true;
@@ -408,6 +474,7 @@ function previewRange() {
       report: result.report, patch: null
     };
     renderRange();
+    enableRangeCheckpoints(true);
     refreshRangePatch();
     rangeMessage('Compared step ' + start + ' with step ' + end +
       ' on a detached copy of ' + patchSideLabel(source) +
