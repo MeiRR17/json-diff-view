@@ -74,9 +74,13 @@
     <section class="patch-workspace" aria-labelledby="patch-heading">
       <div class="section-heading">
         <h2 id="patch-heading">Preview a JSON Patch</h2>
-        <button class="button subtle" type="button" id="use-generated" disabled>Use generated patch</button>
+        <div class="patch-file-actions">
+          <button class="button subtle" type="button" id="import-patch">↑ Import .jsonpatch</button>
+          <input id="patch-file" type="file" accept=".jsonpatch,.json,application/json" hidden>
+          <button class="button subtle" type="button" id="use-generated" disabled>Use generated patch</button>
+        </div>
       </div>
-      <p class="hint">Paste a JSON Patch array or use the patch generated above. Applying a patch creates a detached copy of <strong>Before</strong>. Your editors remain unchanged until you explicitly choose to send the result to After.</p>
+      <p class="hint">Paste a JSON Patch array, import a local .jsonpatch/.json file, or use the patch generated above. Applying a patch creates a detached copy of <strong>Before</strong>. Your editors remain unchanged until you explicitly choose to send the result to After.</p>
       <div class="editors">
         <div class="editor">
           <label for="patch-source">Patch operations (add, remove, replace)</label>
