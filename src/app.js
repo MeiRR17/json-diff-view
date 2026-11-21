@@ -73,6 +73,11 @@ const stepImpactNav = document.querySelector('#patch-step-impact-nav');
 const stepImpactPrevious = document.querySelector('#patch-step-impact-previous');
 const stepImpactNext = document.querySelector('#patch-step-impact-next');
 const stepImpactPageSummary = document.querySelector('#patch-step-impact-page-summary');
+const copyStepButton = document.querySelector('#copy-patch-step');
+const downloadStepButton = document.querySelector('#download-patch-step');
+const copyStepImpactButton = document.querySelector('#copy-step-impact');
+const downloadStepImpactJsonButton = document.querySelector('#download-step-impact-json');
+const downloadStepImpactCsvButton = document.querySelector('#download-step-impact-csv');
 
 let latestReport = null;
 let currentPage = 0;
@@ -84,6 +89,7 @@ let impactPage = 0;
 let patchImportSequence = 0;
 let latestInspection = null;
 let inspectionPage = 0;
+let latestStep = null;
 let latestStepImpact = null;
 let stepImpactPage = 0;
 const editorImportVersions = new WeakMap([[beforeEditor, 0], [afterEditor, 0]]);
@@ -202,6 +208,12 @@ function renderReport(report) {
 }
 
 function invalidateStepPreview(message = 'Select a step and preview the detached document.') {
+  latestStep = null;
+  copyStepButton.disabled = true;
+  downloadStepButton.disabled = true;
+  copyStepImpactButton.disabled = true;
+  downloadStepImpactJsonButton.disabled = true;
+  downloadStepImpactCsvButton.disabled = true;
   stepResultEditor.value = '';
   stepStatus.textContent = message;
   stepStatus.classList.remove('error');
@@ -225,6 +237,9 @@ function renderStepImpact() {
   const counts = report.counts;
 
   stepImpactPanel.hidden = false;
+  copyStepImpactButton.disabled = false;
+  downloadStepImpactJsonButton.disabled = false;
+  downloadStepImpactCsvButton.disabled = false;
   stepImpactSummary.textContent = count === 0 ?
     'Step 0: no operation executed, so there is no change.' :
     'Effect of operation ' + count + ': ' + counts.added + ' added, ' +
@@ -303,6 +318,9 @@ function previewPatchStep(selectedCount) {
     stepCountInput.max = String(patch.length);
     stepCountInput.value = String(count);
     stepResultEditor.value = formatted;
+    latestStep = { source, sourceText, patchText: patchSource.value, count, json: formatted };
+    copyStepButton.disabled = false;
+    downloadStepButton.disabled = false;
     stepPreviousButton.disabled = count === 0;
     stepNextButton.disabled = count >= patch.length;
     const current = count === 0 ? 'Original document (no operations)' :
@@ -319,6 +337,9 @@ function previewPatchStep(selectedCount) {
       renderStepImpact();
     } catch (impactError) {
       latestStepImpact = null;
+      copyStepImpactButton.disabled = true;
+      downloadStepImpactJsonButton.disabled = true;
+      downloadStepImpactCsvButton.disabled = true;
       stepImpactPanel.hidden = false;
       stepImpactRows.replaceChildren();
       stepImpactNav.hidden = true;
@@ -334,6 +355,92 @@ function previewPatchStep(selectedCount) {
       (error instanceof Error ? error.message : 'invalid patch'), true);
   }
 }
+
+function currentStep() {
+  if (!latestStep || patchBase.value !== latestStep.source ||
+      patchEditor(latestStep.source).value !== latestStep.sourceText ||
+      patchSource.value !== latestStep.patchText ||
+      String(stepCountInput.value) !== String(latestStep.count)) {
+    invalidateStepPreview();
+    stepMessage('Step preview is stale. Preview the selected step again before exporting.', true);
+    return null;
+  }
+  return latestStep;
+}
+function currentStepImpact() {
+  const step = currentStep();
+  if (!step) return null;
+  if (!latestStepImpact || latestStepImpact.count !== step.count) {
+    stepMessage('Step effect report is unavailable for this preview.', true);
+    return null;
+  }
+  return { step, report: latestStepImpact.report };
+}
+function stepImpactSource(step) {
+  const from = step.count === 0 ? 'initial source' : 'step ' + (step.count - 1);
+  return patchSideLabel(step.source) + ': ' + from + ' → step ' + step.count;
+}
+copyStepButton.addEventListener('click', async () => {
+  const step = currentStep();
+  if (!step) return;
+  try {
+    await navigator.clipboard.writeText(step.json + '\n');
+    stepMessage('Intermediate JSON after step ' + step.count + ' copied to clipboard.');
+  } catch {
+    stepMessage('Could not copy intermediate JSON. Check clipboard permissions.', true);
+  }
+});
+downloadStepButton.addEventListener('click', () => {
+  const step = currentStep();
+  if (!step) return;
+  try {
+    downloadReport(step.json + '\n',
+      'patch-' + step.source + '-step-' + step.count + '.json',
+      'application/json;charset=utf-8');
+    stepMessage('Intermediate JSON after step ' + step.count + ' downloaded.');
+  } catch (error) {
+    stepMessage('Step download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+copyStepImpactButton.addEventListener('click', async () => {
+  const impact = currentStepImpact();
+  if (!impact) return;
+  try {
+    await navigator.clipboard.writeText(serializeReportJson(impact.report, {
+      format: 'json-diff-view-step-impact',
+      source: stepImpactSource(impact.step)
+    }));
+    stepMessage('Complete effect of step ' + impact.step.count + ' copied.');
+  } catch {
+    stepMessage('Could not copy step effect. Check clipboard permissions.', true);
+  }
+});
+function downloadStepImpact(format) {
+  const impact = currentStepImpact();
+  if (!impact) return;
+  const { step, report } = impact;
+  try {
+    const csv = format === 'csv';
+    const serialized = csv ?
+      serializeReportCsv(report, { source: stepImpactSource(step) }) :
+      serializeReportJson(report, {
+        format: 'json-diff-view-step-impact',
+        source: stepImpactSource(step)
+      });
+    downloadReport(serialized,
+      'patch-' + step.source + '-step-' + step.count + '-impact.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    stepMessage('Full effect of step ' + step.count + ' downloaded as ' +
+      format.toUpperCase() + (report.truncated ? ' (report truncated).' : '.'));
+  } catch (error) {
+    stepMessage('Step impact download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+downloadStepImpactJsonButton.addEventListener('click', () => downloadStepImpact('json'));
+downloadStepImpactCsvButton.addEventListener('click', () => downloadStepImpact('csv'));
+
 stepPreviewButton.addEventListener('click', () => previewPatchStep());
 stepPreviousButton.addEventListener('click', () => {
   const count = Number(stepCountInput.value);

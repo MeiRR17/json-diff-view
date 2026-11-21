@@ -158,3 +158,11 @@ a{color:#155a98}
 .patch-step-impact h4{font-size:.95rem;margin:0 0 8px}
 .step-impact-summary{font-size:.85rem;color:#3d5471;font-weight:650;margin:10px 0}
 @media(prefers-color-scheme:dark){.patch-step-impact{border-color:#3b5068}.step-impact-summary{color:#b6cce3}}
+
+/* Export individual detached patch checkpoints and per-operation effects. */
+.step-export-actions{display:flex;flex-wrap:wrap;gap:9px;margin:16px 0 6px}
+.step-export-actions .button{font-size:.84rem}
+.patch-step-impact .section-heading{flex-wrap:wrap;align-items:center;gap:12px}
+.patch-step-impact .section-heading h4{margin:0}
+.patch-step-impact .result-actions{margin-left:auto}
+@media(max-width:700px){.step-export-actions .button{flex:1 1 150px}.patch-step-impact .result-actions{width:100%;justify-content:flex-start}}

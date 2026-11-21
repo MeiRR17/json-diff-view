@@ -175,12 +175,23 @@
           <button class="button subtle" type="button" id="patch-step-previous" disabled>Previous step</button>
           <button class="button subtle" type="button" id="patch-step-next" disabled>Next step</button>
         </div>
+        <div class="step-export-actions">
+          <button class="button subtle" id="copy-patch-step" type="button" disabled>Copy step JSON</button>
+          <button class="button subtle" id="download-patch-step" type="button" disabled>↓ Download step JSON</button>
+        </div>
         <label class="patch-step-result-label" for="patch-step-result">Document at selected step (read-only)</label>
         <textarea id="patch-step-result" rows="7" readonly spellcheck="false" placeholder="Preview a step to inspect the intermediate document."></textarea>
         <p class="status" id="patch-step-status" role="status" aria-live="polite">Select a step and preview the detached document.</p>
         <section class="patch-step-impact" id="patch-step-impact" aria-labelledby="patch-step-impact-heading" hidden>
-          <h4 id="patch-step-impact-heading">Effect of this operation</h4>
-          <p class="hint">Structural changes caused by the selected operation only, comparing the document just before and just after that instruction.</p>
+          <div class="section-heading">
+            <h4 id="patch-step-impact-heading">Effect of this operation</h4>
+            <div class="result-actions">
+              <button class="button subtle" id="copy-step-impact" type="button" disabled>Copy step impact</button>
+              <button class="button subtle" id="download-step-impact-json" type="button" disabled>↓ Step impact JSON</button>
+              <button class="button subtle" id="download-step-impact-csv" type="button" disabled>↓ Step impact CSV</button>
+            </div>
+          </div>
+          <p class="hint">Structural changes caused by the selected operation only, comparing the document just before and just after that instruction. Exports include all recorded changes even when the table has multiple pages.</p>
           <p class="step-impact-summary" id="patch-step-impact-summary" role="status" aria-live="polite"></p>
           <div class="results-scroll">
             <table class="diff-table">
