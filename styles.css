@@ -49,3 +49,16 @@ a{color:#155a98}
 
 /* RFC 6902 patch actions */
 .result-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}.result-actions .button{white-space:nowrap}.result-actions .button:disabled{cursor:not-allowed}@media(max-width:680px){.result-actions{width:100%;justify-content:flex-start}.result-actions .button{flex:1 1 auto}}
+
+/* RFC 6902 patch application is preview-only until explicitly confirmed. */
+.patch-workspace{margin-top:27px;padding:23px;border:1px solid var(--line,#dce5f1);background:var(--surface,#fff);border-radius:14px}
+.patch-workspace .section-heading{display:flex;align-items:center;justify-content:space-between;gap:13px;flex-wrap:wrap}
+.patch-workspace .hint{font-size:13px;line-height:1.7;color:var(--muted,#788ba2)}
+.patch-workspace .editor{min-width:0}
+.patch-workspace .editor label{display:block;font-weight:740;font-size:13px;margin:8px 0}
+.patch-workspace textarea{width:100%;min-height:190px;resize:vertical;box-sizing:border-box;padding:13px;border:1px solid #d9e3f0;border-radius:9px;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:#fafdff;color:#243d60;unicode-bidi:plaintext}
+.patch-workspace textarea[readonly]{background:#f4f8ff}
+.patch-workspace textarea:focus-visible{outline:2px solid #abc7fa;outline-offset:2px}
+.patch-workspace .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.patch-workspace .actions .button{flex:1 1 160px}
+@media(max-width:670px){.patch-workspace{padding:15px}.patch-workspace .editors{display:grid;grid-template-columns:1fr;gap:13px}}
