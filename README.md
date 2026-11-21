@@ -10,9 +10,9 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 - Compare object keys and nested structures with exact \`$\` paths.
 - Highlight additions, removals, and changes in aligned before/after columns. Filter recorded changes by a case-insensitive JSON path substring and by change type; navigate 100-result pages without rendering all 5,000 entries simultaneously.
 - Load an illustrative sample, swap documents, or clear editors.
-- Copy a JSON change report to your clipboard.
+- Copy the full JSON change report or download it in **JSON** or **CSV** format. CSV is UTF-8 with spreadsheet-formula neutralization; exports include recorded changes regardless of UI filters or pages.
 - Export a **standards-based RFC 6902 JSON Patch** as a bare JSON array, through clipboard or a downloadable `.jsonpatch` file. Select **Before → After** for forward changes or **After → Before** for a reverse/rollback patch. Optionally add `test` operations before each generated removal or replacement to detect unexpected values at those paths.
-- Preview applying any imported or generated JSON Patch to a **detached copy** of the selected Before or After document. Inspect the resulting JSON plus a **separate source-to-preview impact report** with added/removed/changed counts, path/type filters, 100-row pages and a full-report clipboard export. Download the result or explicitly send it to the opposite editor for comparison. **Use generated patch** automatically selects the appropriate source for forward or reverse output.
+- Preview applying any imported or generated JSON Patch to a **detached copy** of the selected Before or After document. Inspect the resulting JSON plus a **separate source-to-preview impact report** with added/removed/changed counts, path/type filters, 100-row pages and full-report clipboard, JSON and CSV exports. Download the result or explicitly send it to the opposite editor for comparison. **Use generated patch** automatically selects the appropriate source for forward or reverse output.
 - Import a local `.jsonpatch` or `.json` file into the patch editor. The import validates that it contains an array of at most 5,000 operations and respects the 2 MiB file limit; **it does not execute the patch or change either document**. If patch text is already present, replacing it requires confirmation. Switching to a newly generated patch cancels any unfinished import so an older file cannot overwrite the selected patch.
 - Keyboard shortcut: **Ctrl+Enter** (Windows/Linux) or **⌘+Enter** (macOS).
 - Responsive layout with keyboard-accessible controls, light and dark themes.
@@ -35,7 +35,7 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 - Arrays are compared **by index**, not by record ID or edit distance. Inserting an item near the front can produce several changed-index entries.
 - Numbers, strings, booleans, and \`null\` compare by value. Unlike text diffs, \`1\` and \`1.0\` represent the same JSON number.
 - Added or removed nested objects/arrays appear as a single path containing the full value, rather than one row per descendant.
-- The **visual change report** is still a descriptive list of before/after values and is **not itself a patch**. On-screen path/type filters and pagination only change the displayed rows; **Copy change report** and JSON Patch exports still use the complete comparison, not the current filtered page.
+- The **visual change report** is still a descriptive list of before/after values and is **not itself a patch**. On-screen path/type filters and pagination only change the displayed rows; **Copy change report**, JSON/CSV report downloads and JSON Patch exports use the complete recorded comparison, not the current filtered page. A report truncated by the 5,000-change safety limit remains marked as truncated.
 - The **separate JSON Patch export** emits RFC 6902 `add`, `remove`, and `replace` operations in either direction, independently computed from the actual Before and After values; opt-in **guarded generation** inserts `test` checks immediately before `remove` and `replace` (but never generates `move` or `copy`). The **import/apply** editor additionally understands external `test`, `copy`, and `move` operations. Object paths use JSON Pointer escaping (`~0` for `~`, `~1` for `/`). The root document path is the empty string.
 - Array changes are index-based: common positions are compared, excess trailing entries are removed from highest index to lowest, and new trailing entries are added in increasing index order. This does not infer semantic moves or record IDs.
 - A guarded patch compares each value that will be removed or replaced with the expected source value (Before in forward mode, After in reverse mode). It is **not** a full-document concurrency guard: newly added properties, array appends, and unrelated changes are not protected. No guards are added when generating a pure-add patch.
@@ -47,7 +47,8 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 - The result preview is capped at **2 MiB** and is not written into either editor until **Send result to After** or **Send result to Before** is clicked, depending on the selected patch source. The impact review compares the original selected source against the computed result, not the operations in the patch. It can be truncated at 5,000 recorded differences; if its 100,000-node/200-depth comparison limit is exceeded, the result remains available but the impact review is marked unavailable. Filters only affect visible impact rows, not the copied impact report. Importing a patch performs file reading and shape/size checks only; semantic validation occurs during explicit Preview. In-flight file loads are ignored when the patch editor changes, preventing stale asynchronous imports from replacing typed instructions. If the destination editor already has content, the tool requests confirmation before replacing it. Switching the preview source invalidates the previous preview, and changes to the selected source or patch text invalidate result transfer/download.
 
 - Input is limited to **2 MiB per editor**. Traversal has limits of 100,000 visited nodes, nesting depth 200 and 5,000 recorded differences. The table displays up to 100 rows per page, with filters operating on those recorded differences; a truncated report is explicitly marked as such.
-- Long values in the visual table have shortened previews; the copied report contains their full content.
+- Long values in the visual table have shortened previews; copied and downloaded reports contain full recorded values.
+- CSV exports use CRLF rows, UTF-8 BOM, and complete JSON-serialized values in `before_json`/`after_json` columns (so explicit `null` differs from a missing value). The `report_truncated` and `source` columns provide context. User-controlled cells beginning with spreadsheet formula prefixes are escaped before quoting. No data is uploaded; downloads are created locally. Downloads refuse files exceeding **8 MiB** rather than silently truncating them. An empty CSV report contains a header row only.
 
 ## Project layout
 
@@ -58,6 +59,7 @@ src/diff.js      Pure structural comparison and JSON parsing
 src/patch.js     RFC 6902 patch generation and serialization
 src/apply.js     Detached RFC 6902 patch application, own-property pointers, safe move/copy
 src/app.js       Browser interactions, file import, report rendering
+src/export.js    Full report JSON and safe CSV serialization
 \`\`\`
 
 ## Privacy

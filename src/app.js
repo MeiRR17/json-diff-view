@@ -1,10 +1,12 @@
 import { diffJson, parseJson } from './diff.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
 import { applyJsonPatch } from './apply.js';
+import { serializeReportJson, serializeReportCsv } from './export.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
 const PAGE_SIZE = 100;
+const MAX_REPORT_EXPORT_BYTES = 8 * 1024 * 1024;
 
 const beforeEditor = document.querySelector('#before');
 const afterEditor = document.querySelector('#after');
@@ -20,6 +22,8 @@ const previousPageButton = document.querySelector('#page-previous');
 const nextPageButton = document.querySelector('#page-next');
 const pageSummary = document.querySelector('#page-summary');
 const copyButton = document.querySelector('#copy');
+const downloadReportJsonButton = document.querySelector('#download-report-json');
+const downloadReportCsvButton = document.querySelector('#download-report-csv');
 const copyPatchButton = document.querySelector('#copy-patch');
 const downloadPatchButton = document.querySelector('#download-patch');
 const guardPatchCheckbox = document.querySelector('#guard-patch');
@@ -43,6 +47,8 @@ const impactPrevious = document.querySelector('#impact-previous');
 const impactNext = document.querySelector('#impact-next');
 const impactPageSummary = document.querySelector('#impact-page-summary');
 const copyImpactButton = document.querySelector('#copy-impact');
+const downloadImpactJsonButton = document.querySelector('#download-impact-json');
+const downloadImpactCsvButton = document.querySelector('#download-impact-csv');
 
 let latestReport = null;
 let currentPage = 0;
@@ -181,6 +187,8 @@ function invalidatePatchResult() {
   impactFilterType.value = 'all';
   impactNav.hidden = true;
   copyImpactButton.disabled = true;
+  downloadImpactJsonButton.disabled = true;
+  downloadImpactCsvButton.disabled = true;
 }
 function resetReport() {
   invalidatePatchResult();
@@ -197,6 +205,8 @@ function resetReport() {
   latestPatch = null;
   latestComparison = null;
   copyButton.disabled = true;
+  downloadReportJsonButton.disabled = true;
+  downloadReportCsvButton.disabled = true;
   copyPatchButton.disabled = downloadPatchButton.disabled = true;
   summary.hidden = true;
   summary.replaceChildren();
@@ -258,6 +268,8 @@ function compare() {
     latestReport = report;
     renderReport(report);
     copyButton.disabled = false;
+    downloadReportJsonButton.disabled = false;
+    downloadReportCsvButton.disabled = false;
 
     latestComparison = { before: left, after: right };
     const patchStatus = refreshGeneratedPatch();
@@ -398,15 +410,44 @@ document.addEventListener('keydown', event => {
   }
 });
 
+function downloadReport(text, name, mimeType) {
+  if (new TextEncoder().encode(text).byteLength > MAX_REPORT_EXPORT_BYTES) {
+    throw new RangeError('Full report exceeds 8 MiB. Narrow the input documents and compare again.');
+  }
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportComparison(format) {
+  if (!latestReport) return;
+  try {
+    const csv = format === 'csv';
+    const text = csv ? serializeReportCsv(latestReport) :
+      serializeReportJson(latestReport);
+    downloadReport(text,
+      csv ? 'json-differences.csv' : 'json-differences.json',
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    setStatus('Full comparison report downloaded as ' + format.toUpperCase() +
+      (latestReport.truncated ? ' (truncated at 5,000 changes).' : '.'));
+  } catch (error) {
+    setStatus('Report download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+downloadReportJsonButton.addEventListener('click', () => exportComparison('json'));
+downloadReportCsvButton.addEventListener('click', () => exportComparison('csv'));
+
 copyButton.addEventListener('click', async () => {
   if (!latestReport) return;
   try {
-    await navigator.clipboard.writeText(JSON.stringify({
-      format: 'json-diff-view-report',
-      counts: latestReport.counts,
-      truncated: latestReport.truncated,
-      changes: latestReport.changes
-    }, null, 2));
+    await navigator.clipboard.writeText(serializeReportJson(latestReport).trimEnd());
     setStatus('Change report copied to clipboard.');
   } catch {
     setStatus('Clipboard access failed. Try using HTTPS or a local web server.', true);
@@ -464,6 +505,8 @@ function renderPatchImpact() {
     report.changes.length + ' recorded changes match.' +
     (report.truncated ? ' Impact report truncated after 5,000 changes.' : '');
   copyImpactButton.disabled = false;
+  downloadImpactJsonButton.disabled = false;
+  downloadImpactCsvButton.disabled = false;
   impactNav.hidden = matches.length <= PAGE_SIZE;
   impactPrevious.disabled = impactPage === 0;
   impactNext.disabled = impactPage >= pageCount - 1;
@@ -511,21 +554,50 @@ impactNext.addEventListener('click', () => {
   impactPage++;
   renderPatchImpact();
 });
-copyImpactButton.addEventListener('click', async () => {
+function currentImpact() {
   if (!latestImpact || !previewIsCurrent()) {
     invalidatePatchResult();
-    patchMessage('Preview is stale. Apply the patch again before copying impact.', true);
-    return;
+    patchMessage('Preview is stale. Apply the patch again before exporting impact.', true);
+    return null;
   }
-  const { source, report } = latestImpact;
+  return latestImpact;
+}
+
+function exportImpact(format) {
+  const impact = currentImpact();
+  if (!impact) return;
+  const { source, report } = impact;
+  const sourceName = patchSideLabel(source);
   try {
-    await navigator.clipboard.writeText(JSON.stringify({
+    const csv = format === 'csv';
+    const data = csv ?
+      serializeReportCsv(report, { source: sourceName + ' → preview' }) :
+      serializeReportJson(report, {
+        format: 'json-diff-view-patch-impact',
+        source: sourceName
+      });
+    downloadReport(data,
+      'patch-impact-' + source + '-to-preview.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    patchMessage('Full patch-impact report downloaded as ' + format.toUpperCase() +
+      (report.truncated ? ' (truncated at 5,000 changes).' : '.'));
+  } catch (error) {
+    patchMessage('Impact report download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+downloadImpactJsonButton.addEventListener('click', () => exportImpact('json'));
+downloadImpactCsvButton.addEventListener('click', () => exportImpact('csv'));
+
+copyImpactButton.addEventListener('click', async () => {
+  const impact = currentImpact();
+  if (!impact) return;
+  const { source, report } = impact;
+  try {
+    await navigator.clipboard.writeText(serializeReportJson(report, {
       format: 'json-diff-view-patch-impact',
-      source: patchSideLabel(source),
-      counts: report.counts,
-      truncated: report.truncated,
-      changes: report.changes
-    }, null, 2));
+      source: patchSideLabel(source)
+    }).trimEnd());
     patchMessage('Full impact report copied; on-screen filters do not affect the export.');
   } catch {
     patchMessage('Could not copy impact report. Check clipboard permissions.', true);
@@ -584,6 +656,8 @@ function previewPatch() {
       latestImpact = null;
       impactPanel.hidden = false;
       copyImpactButton.disabled = true;
+      downloadImpactJsonButton.disabled = true;
+      downloadImpactCsvButton.disabled = true;
       impactNav.hidden = true;
       impactRows.replaceChildren();
       impactSummary.textContent = 'Impact report unavailable: ' +

@@ -57,6 +57,8 @@
         <h2 id="results-heading">Differences</h2>
         <div class="result-actions">
           <button class="button subtle" type="button" id="copy" disabled>Copy change report</button>
+          <button class="button subtle" type="button" id="download-report-json" disabled>↓ Report JSON</button>
+          <button class="button subtle" type="button" id="download-report-csv" disabled>↓ Report CSV</button>
           <button class="button subtle" type="button" id="copy-patch" disabled>Copy JSON Patch</button>
           <button class="button subtle" type="button" id="download-patch" disabled>↓ Download .jsonpatch</button>
         </div>
@@ -137,9 +139,13 @@
       <section class="patch-impact" id="patch-impact" aria-labelledby="impact-heading" hidden>
         <div class="section-heading">
           <h3 id="impact-heading">Patch impact review</h3>
-          <button class="button subtle" type="button" id="copy-impact" disabled>Copy full impact report</button>
+          <div class="result-actions">
+            <button class="button subtle" type="button" id="copy-impact" disabled>Copy full impact report</button>
+            <button class="button subtle" type="button" id="download-impact-json" disabled>↓ Impact JSON</button>
+            <button class="button subtle" type="button" id="download-impact-csv" disabled>↓ Impact CSV</button>
+          </div>
         </div>
-        <p class="hint">Changes between the selected source and the detached preview, not the patch instruction list. The original JSON editors are unchanged.</p>
+        <p class="hint">Changes between the selected source and the detached preview, not the patch instruction list. The original JSON editors are unchanged. JSON/CSV exports use every recorded change, not only visible rows.</p>
         <p class="impact-summary" id="impact-summary" role="status" aria-live="polite"></p>
         <div class="impact-filters" role="group" aria-label="Filter patch impact">
           <label for="impact-filter-path">JSON path contains</label>
