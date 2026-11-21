@@ -11,6 +11,7 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 - Highlight additions, removals, and changes in aligned before/after columns.
 - Load an illustrative sample, swap documents, or clear editors.
 - Copy a JSON change report to your clipboard.
+- Export a **standards-based RFC 6902 JSON Patch** as a bare JSON array, through clipboard or a downloadable `.jsonpatch` file.
 - Keyboard shortcut: **Ctrl+Enter** (Windows/Linux) or **⌘+Enter** (macOS).
 - Responsive layout with keyboard-accessible controls, light and dark themes.
 
@@ -32,7 +33,10 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 - Arrays are compared **by index**, not by record ID or edit distance. Inserting an item near the front can produce several changed-index entries.
 - Numbers, strings, booleans, and \`null\` compare by value. Unlike text diffs, \`1\` and \`1.0\` represent the same JSON number.
 - Added or removed nested objects/arrays appear as a single path containing the full value, rather than one row per descendant.
-- The change report is **not a JSON Patch** and should not be applied automatically to production data.
+- The **visual change report** is still a descriptive list of before/after values and is **not itself a patch**.
+- The **separate JSON Patch export** emits RFC 6902 `add`, `remove`, and `replace` operations (without `move`, `copy`, or `test`). Object paths use JSON Pointer escaping (`~0` for `~`, `~1` for `/`). The root document path is the empty string.
+- Array changes are index-based: common positions are compared, excess trailing entries are removed from highest index to lowest, and new trailing entries are added in increasing index order. This does not infer semantic moves or record IDs.
+- If the transformation needs more than 5,000 operations, the tool refuses to export a potentially incomplete patch. Review any patch before applying it to production data.
 - Input is limited to **2 MiB per editor**. Traversal has limits of 100,000 visited nodes, nesting depth 200 and 5,000 shown differences. A truncated report is explicitly marked as such.
 - Long values in the visual table have shortened previews; the copied report contains their full content.
 
@@ -42,6 +46,7 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 index.html       Accessible editor and diff table
 styles.css       Responsive layout, light/dark themes
 src/diff.js      Pure structural comparison and JSON parsing
+src/patch.js     RFC 6902 patch generation and serialization
 src/app.js       Browser interactions, file import, report rendering
 \`\`\`
 
