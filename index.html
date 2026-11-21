@@ -286,6 +286,47 @@
         <button class="button subtle" type="button" id="download-result" disabled>↓ Download result.json</button>
       </div>
       <p id="patch-status" class="status" role="status" aria-live="polite">This tool does not execute code or upload JSON.</p>
+      <section class="patch-expected-review" aria-labelledby="expected-heading">
+        <div class="section-heading">
+          <h3 id="expected-heading">Compare patch result with expected document</h3>
+          <button class="button subtle" type="button" id="verify-expected" disabled>Compare with opposite editor</button>
+        </div>
+        <p class="hint">After Preview applying patch, compare the detached result to the opposite document editor. A checkpoint bundle places its expected result in After. This is an explicit read-only action: importing a patch or bundle does not execute it.</p>
+        <p id="expected-status" class="status" role="status" aria-live="polite">Preview the patch before comparing its result with the opposite editor.</p>
+        <div id="expected-results" hidden>
+          <div class="section-heading">
+            <h4>Expected-result differences</h4>
+            <div class="result-actions">
+              <button class="button subtle" type="button" id="copy-expected" disabled>Copy full mismatch report</button>
+              <button class="button subtle" type="button" id="download-expected-json" disabled>↓ Mismatch JSON</button>
+              <button class="button subtle" type="button" id="download-expected-csv" disabled>↓ Mismatch CSV</button>
+            </div>
+          </div>
+          <p class="expected-summary" id="expected-summary" role="status" aria-live="polite"></p>
+          <div class="expected-filters" role="group" aria-label="Filter expected-result differences">
+            <label for="expected-filter-path">JSON path contains</label>
+            <input type="search" id="expected-filter-path" placeholder="e.g. $.items" autocomplete="off">
+            <label for="expected-filter-type">Difference type</label>
+            <select id="expected-filter-type">
+              <option value="all">All types</option>
+              <option value="added">Missing from result</option>
+              <option value="removed">Unexpected in result</option>
+              <option value="changed">Different values</option>
+            </select>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">JSON path</th><th scope="col">Patch result</th><th scope="col">Expected editor</th></tr></thead>
+              <tbody id="expected-rows"></tbody>
+            </table>
+          </div>
+          <nav class="results-nav" id="expected-nav" aria-label="Expected-result difference pages" hidden>
+            <button class="button subtle" type="button" id="expected-previous">Previous page</button>
+            <span id="expected-page-summary" aria-live="polite"></span>
+            <button class="button subtle" type="button" id="expected-next">Next page</button>
+          </nav>
+        </div>
+      </section>
       <section class="patch-impact" id="patch-impact" aria-labelledby="impact-heading" hidden>
         <div class="section-heading">
           <h3 id="impact-heading">Patch impact review</h3>
@@ -324,7 +365,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. After a user-triggered preview, the expected-result comparison shows whether the detached patch result structurally matches the opposite editor, including any mismatched paths. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>

@@ -107,7 +107,23 @@ const downloadRangeEndButton = document.querySelector('#download-range-end');
 const downloadRangeBundleButton = document.querySelector('#download-range-bundle');
 const importBundleButton = document.querySelector('#import-checkpoint-bundle');
 const bundleFile = document.querySelector('#checkpoint-bundle-file');
+const verifyExpectedButton = document.querySelector('#verify-expected');
+const expectedPanel = document.querySelector('#expected-results');
+const expectedStatus = document.querySelector('#expected-status');
+const expectedSummary = document.querySelector('#expected-summary');
+const expectedRows = document.querySelector('#expected-rows');
+const expectedFilterPath = document.querySelector('#expected-filter-path');
+const expectedFilterType = document.querySelector('#expected-filter-type');
+const expectedNav = document.querySelector('#expected-nav');
+const expectedPrevious = document.querySelector('#expected-previous');
+const expectedNext = document.querySelector('#expected-next');
+const expectedPageSummary = document.querySelector('#expected-page-summary');
+const copyExpectedButton = document.querySelector('#copy-expected');
+const downloadExpectedJsonButton = document.querySelector('#download-expected-json');
+const downloadExpectedCsvButton = document.querySelector('#download-expected-csv');
 
+let latestVerification = null;
+let expectedPage = 0;
 let latestReport = null;
 let currentPage = 0;
 let latestPatch = null;
@@ -967,7 +983,202 @@ inspectPatchButton.addEventListener('click', () => {
   }
 });
 
+// This review is only available after the user explicitly creates a detached
+// patch preview. It never applies an imported patch or writes to either editor.
+function invalidateExpectedReview() {
+  latestVerification = null;
+  expectedPage = 0;
+  verifyExpectedButton.disabled = true;
+  expectedPanel.hidden = true;
+  expectedStatus.textContent = 'Preview the patch before comparing its result with the opposite editor.';
+  expectedStatus.classList.remove('error');
+  expectedSummary.textContent = '';
+  expectedRows.replaceChildren();
+  expectedNav.hidden = true;
+  expectedFilterPath.value = '';
+  expectedFilterType.value = 'all';
+  copyExpectedButton.disabled = true;
+  downloadExpectedJsonButton.disabled = true;
+  downloadExpectedCsvButton.disabled = true;
+}
+function expectedMessage(message, isError = false) {
+  expectedStatus.textContent = message;
+  expectedStatus.classList.toggle('error', isError);
+}
+function expectedTarget(source) {
+  return source === 'before' ? 'after' : 'before';
+}
+function currentExpectedReview() {
+  if (!latestVerification || !previewIsCurrent() ||
+      patchEditor(expectedTarget(latestVerification.source)).value !==
+        latestVerification.expectedText ||
+      lastApplied.json !== latestVerification.resultText) {
+    latestVerification = null;
+    expectedPanel.hidden = true;
+    copyExpectedButton.disabled = true;
+    downloadExpectedJsonButton.disabled = true;
+    downloadExpectedCsvButton.disabled = true;
+    expectedMessage('The source, patch, or expected document has changed. Compare again.', true);
+    return null;
+  }
+  return latestVerification;
+}
+function expectedReportSource(review) {
+  return 'Patch result from ' + patchSideLabel(review.source) +
+    ' → expected ' + patchSideLabel(expectedTarget(review.source));
+}
+function renderExpectedReview() {
+  if (!latestVerification) return;
+  const { report, source } = latestVerification;
+  const needle = expectedFilterPath.value.trim().toLocaleLowerCase();
+  const type = expectedFilterType.value;
+  const matches = report.changes.filter(change =>
+    (type === 'all' || change.type === type) &&
+    (!needle || change.path.toLocaleLowerCase().includes(needle))
+  );
+  const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  expectedPage = Math.min(expectedPage, pages - 1);
+  const start = expectedPage * PAGE_SIZE;
+  const visible = matches.slice(start, start + PAGE_SIZE);
+  const counts = report.counts;
+  expectedPanel.hidden = false;
+  const matchesExpected = report.changes.length === 0 && !report.truncated;
+  expectedSummary.textContent = matchesExpected ?
+    'MATCH: The detached patch result equals the ' +
+      patchSideLabel(expectedTarget(source)) + ' document structurally.' :
+    'MISMATCH: ' + counts.added + ' expected additions, ' +
+      counts.removed + ' unexpected result values, ' +
+      counts.changed + ' different values. ' +
+      matches.length + ' of ' + report.changes.length +
+      ' recorded differences match the filters.' +
+      (report.truncated ? ' Report truncated at 5,000 differences.' : '');
+  copyExpectedButton.disabled = false;
+  downloadExpectedJsonButton.disabled = false;
+  downloadExpectedCsvButton.disabled = false;
+  expectedNav.hidden = matches.length <= PAGE_SIZE;
+  expectedPrevious.disabled = expectedPage === 0;
+  expectedNext.disabled = expectedPage >= pages - 1;
+  expectedPageSummary.textContent = 'Page ' + (expectedPage + 1) + ' of ' + pages;
+  const fragment = document.createDocumentFragment();
+  if (!visible.length) {
+    const row = document.createElement('tr');
+    const message = cell('td', report.changes.length ?
+      'No recorded differences match these filters.' :
+      'No structural differences: the patch result matches the expected document.', 'empty');
+    message.colSpan = 3;
+    row.append(message);
+    fragment.append(row);
+  } else for (const change of visible) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+    const pathCell = document.createElement('td');
+    pathCell.append(cell('span', change.type, 'tag'));
+    pathCell.append(document.createElement('br'));
+    pathCell.append(cell('span', change.path, 'path'));
+    const actualCell = document.createElement('td');
+    actualCell.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const expectedCell = document.createElement('td');
+    expectedCell.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(pathCell, actualCell, expectedCell);
+    fragment.append(row);
+  }
+  expectedRows.replaceChildren(fragment);
+}
+verifyExpectedButton.addEventListener('click', () => {
+  latestVerification = null;
+  expectedPanel.hidden = true;
+  copyExpectedButton.disabled = true;
+  downloadExpectedJsonButton.disabled = true;
+  downloadExpectedCsvButton.disabled = true;
+  if (!previewIsCurrent()) {
+    invalidatePatchResult();
+    expectedMessage('Preview is stale. Apply the patch to a detached copy again.', true);
+    return;
+  }
+  const source = lastApplied.source;
+  const target = expectedTarget(source);
+  const expectedText = patchEditor(target).value;
+  try {
+    fitInput(expectedText, patchSideLabel(target));
+    const expectedValue = parseJson(expectedText, patchSideLabel(target));
+    const actualValue = parseJson(lastApplied.json, 'Detached patch result');
+    const report = diffJson(actualValue, expectedValue);
+    latestVerification = {
+      source,
+      expectedText,
+      resultText: lastApplied.json,
+      report
+    };
+    expectedPage = 0;
+    expectedFilterPath.value = '';
+    expectedFilterType.value = 'all';
+    renderExpectedReview();
+    expectedMessage(report.changes.length === 0 && !report.truncated ?
+      'The patch result matches the opposite editor. No editor was changed.' :
+      'The patch result differs from the opposite editor. Inspect the recorded differences below.');
+  } catch (error) {
+    expectedMessage('Could not compare expected result: ' +
+      (error instanceof Error ? error.message : 'comparison unavailable'), true);
+  }
+});
+expectedFilterPath.addEventListener('input', () => {
+  expectedPage = 0;
+  if (currentExpectedReview()) renderExpectedReview();
+});
+expectedFilterType.addEventListener('change', () => {
+  expectedPage = 0;
+  if (currentExpectedReview()) renderExpectedReview();
+});
+expectedPrevious.addEventListener('click', () => {
+  if (!currentExpectedReview() || expectedPage === 0) return;
+  expectedPage--;
+  renderExpectedReview();
+});
+expectedNext.addEventListener('click', () => {
+  if (!currentExpectedReview()) return;
+  expectedPage++;
+  renderExpectedReview();
+});
+copyExpectedButton.addEventListener('click', async () => {
+  const review = currentExpectedReview();
+  if (!review) return;
+  try {
+    await navigator.clipboard.writeText(serializeReportJson(review.report, {
+      format: 'json-diff-view-expected-result',
+      source: expectedReportSource(review)
+    }));
+    expectedMessage('Full expected-result comparison copied; filters do not affect exports.');
+  } catch {
+    expectedMessage('Clipboard access failed. Use a JSON or CSV download.', true);
+  }
+});
+function downloadExpectedReport(format) {
+  const review = currentExpectedReview();
+  if (!review) return;
+  try {
+    const csv = format === 'csv';
+    const content = csv ?
+      serializeReportCsv(review.report, { source: expectedReportSource(review) }) :
+      serializeReportJson(review.report, {
+        format: 'json-diff-view-expected-result',
+        source: expectedReportSource(review)
+      });
+    downloadReport(content,
+      'patch-' + review.source + '-expected-result.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    expectedMessage('Full expected-result comparison downloaded as ' +
+      format.toUpperCase() +
+      (review.report.truncated ? ' (truncated at 5,000 differences).' : '.'));
+  } catch (error) {
+    expectedMessage('Expected-result report download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+downloadExpectedJsonButton.addEventListener('click', () => downloadExpectedReport('json'));
+downloadExpectedCsvButton.addEventListener('click', () => downloadExpectedReport('csv'));
+
 function invalidatePatchResult() {
+  invalidateExpectedReview();
   lastApplied = null;
   patchResult.value = '';
   sendResultButton.disabled = true;
@@ -1446,6 +1657,8 @@ function previewPatch() {
     patchResult.value = json;
     sendResultButton.disabled = false;
     downloadResultButton.disabled = false;
+    verifyExpectedButton.disabled = false;
+    expectedMessage('Detached patch result ready. Compare it to the opposite editor when needed.');
     let impactWarning = '';
     try {
       // The impact report observes the final result, including move/copy.
