@@ -83,7 +83,7 @@
       <p class="hint">Paste a JSON Patch array, import a local .jsonpatch/.json file, or use the patch generated above. Applying a patch creates a detached copy of <strong>Before</strong>. Your editors remain unchanged until you explicitly choose to send the result to After.</p>
       <div class="editors">
         <div class="editor">
-          <label for="patch-source">Patch operations (add, remove, replace, test)</label>
+          <label for="patch-source">Patch operations (add, remove, replace, test, copy, move)</label>
           <textarea id="patch-source" rows="9" spellcheck="false" placeholder='[{"op":"replace","path":"/version","value":2}]'></textarea>
         </div>
         <div class="editor">
@@ -101,7 +101,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates RFC 6902 add/remove/replace operations.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The patch preview implements RFC 6902 add/remove/replace/test operations on a separate copy. A failed test stops application; move/copy remain unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>

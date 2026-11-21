@@ -1,5 +1,5 @@
 /**
- * Apply the add/remove/replace/test subset of RFC 6902 on a detached JSON clone.
+ * Apply RFC 6902 add/remove/replace/test/copy/move on a detached JSON clone.
  *
  * Security properties:
  * - Traversal only follows own data properties, never prototype-chain values.
@@ -7,8 +7,8 @@
  * - Array indexes must be canonical decimal indexes; "-" is append-only.
  * - An invalid operation aborts without modifying the caller's document.
  *
- * Only parsed JSON data is supported. move and copy are intentionally
- * rejected, rather than silently ignored.
+ * Only parsed JSON data is supported. Moves use removal-before-insertion
+ * semantics and cannot target a descendant of their source.
  */
 const MAX_OPERATIONS = 5000;
 const MAX_POINTER_LENGTH = 8192;
@@ -99,13 +99,45 @@ function applyOne(root, operation, comparisonBudget) {
     throw new TypeError('JSON Patch operation must be an object.');
   }
   const { op, path } = operation;
-  if (!['add', 'remove', 'replace', 'test'].includes(op)) {
-    throw new RangeError('Only add, remove, replace and test operations are supported.');
+  if (!['add', 'remove', 'replace', 'test', 'copy', 'move'].includes(op)) {
+    throw new RangeError('Unsupported JSON Patch operation (expected add, remove, replace, test, copy or move).');
   }
   const parts = decodePointer(path);
   const hasValue = own(operation, 'value');
   if ((op === 'add' || op === 'replace' || op === 'test') && !hasValue) {
     throw new TypeError('Add, replace and test operations require a value.');
+  }
+  if (op === 'copy' || op === 'move') {
+    // Both operations read their source before modifying the detached document.
+    // Source paths must resolve to existing values, including the root pointer.
+    if (!own(operation, 'from')) {
+      throw new TypeError('Copy and move operations require a from pointer.');
+    }
+    const fromParts = decodePointer(operation.from);
+    const sourceValue = existingValue(root, fromParts);
+
+    if (op === 'move') {
+      // RFC 6902 forbids moving a value into one of its own descendants.
+      // Compare decoded segments, not raw strings ("/a" is not "/ab").
+      if (parts.length > fromParts.length &&
+          fromParts.every((segment, index) => segment === parts[index])) {
+        throw new RangeError('Cannot move a value into its own descendant.');
+      }
+      // Moving a path onto itself is a no-op, but it must still exist.
+      if (fromParts.length === parts.length &&
+          fromParts.every((segment, index) => segment === parts[index])) {
+        return root;
+      }
+      if (!fromParts.length) {
+        throw new RangeError('Moving the document root to a child path is unsupported.');
+      }
+      // Remove first, then resolve the destination against the resulting tree.
+      // This is essential when moving an element within the same array.
+      root = applyOne(root, { op: 'remove', path: operation.from }, comparisonBudget);
+    }
+    // The add handler deep-clones the captured source before insertion,
+    // so copying an ancestor cannot create an object cycle.
+    return applyOne(root, { op: 'add', path, value: sourceValue }, comparisonBudget);
   }
   if (op === 'test') {
     const expected = jsonClone(operation.value);
@@ -145,7 +177,7 @@ function applyOne(root, operation, comparisonBudget) {
 
 /**
  * @param {unknown} document JSON-parsed original document.
- * @param {unknown[]} patch RFC 6902 operation array (supported subset).
+ * @param {unknown[]} patch RFC 6902 operation array.
  * @returns {unknown} A new JSON value, with no mutation to the input.
  */
 export function applyJsonPatch(document, patch) {
