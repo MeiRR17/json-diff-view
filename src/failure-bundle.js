@@ -6,6 +6,9 @@
  * single failed operation provide a smaller isolated reproduction.
  * This module only serializes data: it never executes any patch.
  */
+import { applyJsonPatch, applyJsonPatchPrefix, JsonPatchOperationError } from './apply.js';
+import { diffJson } from './diff.js';
+
 const MAX_INPUT_BYTES = 2 * 1024 * 1024;
 const MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
 const MAX_OPERATIONS = 5000;
@@ -130,5 +133,61 @@ export function parseFailureBundle(text, mode = 'isolated') {
     reason: data.reason,
     documentText: readable(selectedDocument, 'Imported source'),
     patchText: readable(selectedPatch, 'Imported patch')
+  };
+}
+
+/**
+ * Explicit, detached reproduction inspection for a previously imported
+ * failure bundle. Unlike parseFailureBundle, this executes the recorded
+ * prefix on a fresh copy. Call only from an intentional Verify user action.
+ *
+ * The stored explanation is informational; an exact message match is
+ * reported separately from the semantic failure index and checkpoint state.
+ */
+export function verifyFailureBundle(text) {
+  // Reject malformed/oversized imports before evaluating untrusted values.
+  parseFailureBundle(text, 'full');
+  const data = JSON.parse(text);
+  const prefix = data.patch_through_failure;
+  const index = data.failed_operation_index;
+
+  // Reconstruct the last successful state from the ORIGINAL source rather
+  // than trusting the checkpoint supplied in the imported file.
+  const actualLastGood = applyJsonPatchPrefix(data.original_document, prefix, index - 1);
+  const checkpointDiff = diffJson(actualLastGood, data.last_good_document);
+  const checkpointMatches = checkpointDiff.changes.length === 0 &&
+    !checkpointDiff.truncated;
+
+  function attempt(document, operations) {
+    try {
+      applyJsonPatch(document, operations);
+      return { failed: false, index: null, reason: null };
+    } catch (error) {
+      if (!(error instanceof JsonPatchOperationError)) {
+        throw error; // Engine/resource errors are not successful verification.
+      }
+      return { failed: true, index: error.operationIndex, reason: error.message };
+    }
+  }
+
+  const full = attempt(data.original_document, prefix);
+  // Isolated replay deliberately uses the independently reconstructed
+  // checkpoint. A tampered last_good_document cannot make it appear valid.
+  const isolated = attempt(actualLastGood, [prefix[index - 1]]);
+  const fullFailedAtExpected = full.failed && full.index === index;
+  const isolatedFailed = isolated.failed && isolated.index === 1;
+  const recordedReasonMatches = fullFailedAtExpected &&
+    full.reason === data.reason;
+
+  return {
+    expectedIndex: index,
+    checkpointMatches,
+    checkpointDifferences: checkpointDiff.changes.length,
+    checkpointTruncated: checkpointDiff.truncated,
+    fullFailedAtExpected,
+    fullFailedAt: full.index,
+    isolatedFailed,
+    recordedReasonMatches,
+    reproduced: checkpointMatches && fullFailedAtExpected && isolatedFailed
   };
 }

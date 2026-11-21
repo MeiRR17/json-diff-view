@@ -248,3 +248,9 @@ a{color:#155a98}
 .failure-import-control select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.failure-import-control{width:100%}.failure-import-control label{width:100%}.failure-import-control select,.failure-import-control .button{flex:1 1 160px}}
 @media(prefers-color-scheme:dark){.failure-import-control label{color:#b6cce3}.failure-import-control select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* On-demand verification of imported failure evidence. */
+#imported-failure-status{flex:1 1 100%;margin:6px 0 13px;overflow-wrap:anywhere}
+#imported-failure-status.error{color:#923d22;font-weight:650}
+.failure-import-control #verify-imported-failure{font-size:.82rem}
+@media(prefers-color-scheme:dark){#imported-failure-status.error{color:#ffb6a0}}

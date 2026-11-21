@@ -5,7 +5,7 @@ import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
-import { serializeFailureBundle, parseFailureBundle } from './failure-bundle.js';
+import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -136,7 +136,10 @@ const failureIsolateButton = document.querySelector('#isolate-failure');
 const importFailureButton = document.querySelector('#import-failure-bundle');
 const failureFile = document.querySelector('#failure-bundle-file');
 const failureImportMode = document.querySelector('#failure-import-mode');
+const verifyImportedFailureButton = document.querySelector('#verify-imported-failure');
+const importedFailureStatus = document.querySelector('#imported-failure-status');
 
+let latestImportedFailure = null;
 let latestFailure = null;
 let latestVerification = null;
 let expectedPage = 0;
@@ -1198,8 +1201,61 @@ downloadExpectedCsvButton.addEventListener('click', () => downloadExpectedReport
 // Replay only the completed prefix from the pristine JSON source; never
 // display or return the failed operation's partial mutation.
 
+function invalidateImportedFailure(message = 'Import a failure bundle before verifying it.') {
+  latestImportedFailure = null;
+  verifyImportedFailureButton.disabled = true;
+  importedFailureStatus.textContent = message;
+  importedFailureStatus.classList.remove('error');
+}
+function importedFailureCurrent() {
+  const loaded = latestImportedFailure;
+  if (!loaded || failureImportMode.value !== loaded.mode ||
+      patchBase.value !== loaded.source ||
+      patchEditor(loaded.source).value !== loaded.documentText ||
+      patchSource.value !== loaded.patchText) {
+    invalidateImportedFailure('The imported reproduction was changed. Import it again to verify.');
+    return null;
+  }
+  return loaded;
+}
+verifyImportedFailureButton.addEventListener('click', () => {
+  const loaded = importedFailureCurrent();
+  if (!loaded) return;
+  // No imported instructions are executed during file parsing or import.
+  // The deliberate click runs only detached engine operations.
+  try {
+    const result = verifyFailureBundle(loaded.text);
+    if (result.reproduced) {
+      importedFailureStatus.textContent = 'REPRODUCED: failed operation ' +
+        result.expectedIndex + ' fails at the recorded position; the stored last-good ' +
+        'checkpoint matches a fresh replay, and the isolated operation also fails.' +
+        (result.recordedReasonMatches ? ' The recorded reason also matches.' :
+          ' The recorded error text differs; review the imported metadata.');
+      importedFailureStatus.classList.remove('error');
+    } else {
+      importedFailureStatus.textContent = 'INCONSISTENT BUNDLE: checkpoint ' +
+        (result.checkpointMatches ? 'matches' :
+          'differs (' + result.checkpointDifferences + ' recorded differences' +
+          (result.checkpointTruncated ? ', truncated' : '') + ')') +
+        '; full prefix ' + (result.fullFailedAtExpected ?
+          'fails at the recorded operation' :
+          (result.fullFailedAt === null ? 'did not fail' :
+            'fails at operation ' + result.fullFailedAt)) +
+        '; isolated operation ' + (result.isolatedFailed ? 'fails' : 'did not fail') +
+        '. No editor was modified.';
+      importedFailureStatus.classList.add('error');
+    }
+  } catch (error) {
+    importedFailureStatus.textContent = 'Verification unavailable: ' +
+      (error instanceof Error ? error.message : 'replay error') +
+      '. No editor was modified.';
+    importedFailureStatus.classList.add('error');
+  }
+});
+
 async function loadFailureReproduction(file) {
   if (!file) return;
+  invalidateImportedFailure();
   // Newer imports, user edits, and explicit editor replacements win over any
   // pending file read or confirmation dialog.
   const request = ++bundleImportSequence;
@@ -1243,6 +1299,13 @@ async function loadFailureReproduction(file) {
     updateResultTarget();
     invalidateInspection();
     resetReport();
+    latestImportedFailure = {
+      text: contents, source: loaded.source, mode: loaded.mode,
+      documentText: loaded.documentText, patchText: loaded.patchText
+    };
+    verifyImportedFailureButton.disabled = false;
+    importedFailureStatus.textContent =
+      'Bundle imported. Verification has not run; select Verify imported failure to replay it explicitly.';
     patchMessage('Failure bundle loaded (' +
       (loaded.mode === 'full' ? 'full operations through failure' : 'isolated failed operation') +
       ', original failed step ' + loaded.failedIndex + '). ' +
@@ -1265,6 +1328,7 @@ failureImportMode.addEventListener('change', () => {
   // A mode change during an asynchronous import invalidates its proposed
   // editor replacement; the file must be selected again.
   bundleImportSequence++;
+  invalidateImportedFailure('Import the bundle again for the selected replay mode.');
 });
 
 function invalidatePatchFailure() {
