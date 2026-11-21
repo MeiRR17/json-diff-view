@@ -6,14 +6,14 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 
 ## Features
 
-- Paste JSON in two side-by-side editors or open local \`.json\` files.
+- Paste JSON in two side-by-side editors or open local \`.json\` files. Imported documents are syntax-checked and require confirmation before replacing existing contents; stale asynchronous file loads cannot overwrite edits, swapped documents, cleared editors or a newly loaded sample.
 - Compare object keys and nested structures with exact \`$\` paths.
 - Highlight additions, removals, and changes in aligned before/after columns.
 - Load an illustrative sample, swap documents, or clear editors.
 - Copy a JSON change report to your clipboard.
 - Export a **standards-based RFC 6902 JSON Patch** as a bare JSON array, through clipboard or a downloadable `.jsonpatch` file.
 - Preview applying a JSON Patch to a **detached copy** of the Before document, inspect the resulting JSON, download it, or explicitly send it to the After editor for comparison.
-- Import a local `.jsonpatch` or `.json` file into the patch editor. The import validates that it contains an array of at most 5,000 operations and respects the 2 MiB file limit; **it does not execute the patch or change either document**. If patch text is already present, replacing it requires confirmation.
+- Import a local `.jsonpatch` or `.json` file into the patch editor. The import validates that it contains an array of at most 5,000 operations and respects the 2 MiB file limit; **it does not execute the patch or change either document**. If patch text is already present, replacing it requires confirmation. Switching to a newly generated patch cancels any unfinished import so an older file cannot overwrite the selected patch.
 - Keyboard shortcut: **Ctrl+Enter** (Windows/Linux) or **⌘+Enter** (macOS).
 - Responsive layout with keyboard-accessible controls, light and dark themes.
 
