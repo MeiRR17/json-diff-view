@@ -234,3 +234,9 @@ a{color:#155a98}
 .patch-failure-review textarea{display:block;width:100%;min-height:150px;box-sizing:border-box}
 .patch-failure-review .actions{margin-top:11px;flex-wrap:wrap}
 @media(prefers-color-scheme:dark){.patch-failure-review{border-color:#3b5068}.patch-failure-summary{color:#ffb6a0}.patch-failure-label{color:#b6cce3}}
+
+/* Explicit, local-only export and isolation for a failing JSON Patch. */
+.failure-repro-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 9px}
+.failure-repro-actions .button{font-size:.82rem;max-width:100%}
+.patch-failure-review .hint{overflow-wrap:anywhere}
+@media(max-width:700px){.failure-repro-actions .button{flex:1 1 165px}}

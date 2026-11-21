@@ -5,6 +5,7 @@ import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
+import { serializeFailureBundle } from './failure-bundle.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -129,6 +130,9 @@ const patchFailureNote = document.querySelector('#patch-failure-note');
 const failureCopyButton = document.querySelector('#copy-failure-checkpoint');
 const failureDownloadButton = document.querySelector('#download-failure-checkpoint');
 const failureOpenStepButton = document.querySelector('#open-failure-step');
+const failureCopyBundleButton = document.querySelector('#copy-failure-bundle');
+const failureDownloadBundleButton = document.querySelector('#download-failure-bundle');
+const failureIsolateButton = document.querySelector('#isolate-failure');
 
 let latestFailure = null;
 let latestVerification = null;
@@ -1200,6 +1204,9 @@ function invalidatePatchFailure() {
   failureCopyButton.disabled = true;
   failureDownloadButton.disabled = true;
   failureOpenStepButton.disabled = true;
+  failureCopyBundleButton.disabled = true;
+  failureDownloadBundleButton.disabled = true;
+  failureIsolateButton.disabled = true;
 }
 function currentPatchFailure() {
   if (!latestFailure || patchBase.value !== latestFailure.source ||
@@ -1225,7 +1232,11 @@ function showPatchFailure(error, documentSource, operations, source, sourceText)
   const completed = index - 1;
   latestFailure = {
     source, sourceText, patchText: patchSource.value,
-    operationIndex: index, completed, json: null
+    operationIndex: index, completed, reason: error.message,
+    originalDocument: documentSource,
+    operationsToFailure: operations.slice(0, index),
+    json: null,
+    lastGood: null
   };
   patchFailurePanel.hidden = false;
   patchFailureSummary.textContent = 'Operation ' + index + ' (' + opName +
@@ -1247,6 +1258,7 @@ function showPatchFailure(error, documentSource, operations, source, sourceText)
       fitInput(json, 'Last successful checkpoint');
     }
     latestFailure.json = json;
+    latestFailure.lastGood = stable;
     patchFailureCheckpoint.value = json;
     patchFailureNote.textContent =
       'This checkpoint is the document after step ' + completed +
@@ -1254,6 +1266,9 @@ function showPatchFailure(error, documentSource, operations, source, sourceText)
     failureCopyButton.disabled = false;
     failureDownloadButton.disabled = false;
     failureOpenStepButton.disabled = false;
+    failureCopyBundleButton.disabled = false;
+    failureDownloadBundleButton.disabled = false;
+    failureIsolateButton.disabled = false;
   } catch (snapshotError) {
     patchFailureNote.textContent = 'The failure was located, but the last successful ' +
       'checkpoint cannot be shown: ' +
@@ -1284,6 +1299,79 @@ failureDownloadButton.addEventListener('click', () => {
       (error instanceof Error ? error.message : 'unknown error'), true);
   }
 });
+function failureReproduction(failure) {
+  if (failure.lastGood === null) {
+    throw new Error('Last successful checkpoint is unavailable.');
+  }
+  return serializeFailureBundle({
+    source: failure.source,
+    failedIndex: failure.operationIndex,
+    reason: failure.reason,
+    sourceDocument: failure.originalDocument,
+    operationsToFailure: failure.operationsToFailure,
+    lastGood: failure.lastGood
+  });
+}
+failureCopyBundleButton.addEventListener('click', async () => {
+  const failure = currentPatchFailure();
+  if (!failure) return;
+  try {
+    await navigator.clipboard.writeText(failureReproduction(failure));
+    patchMessage('Failure reproduction bundle copied. It contains the full original JSON and patch prefix.');
+  } catch (error) {
+    patchMessage('Cannot copy failure bundle: ' +
+      (error instanceof Error ? error.message : 'clipboard unavailable'), true);
+  }
+});
+failureDownloadBundleButton.addEventListener('click', () => {
+  const failure = currentPatchFailure();
+  if (!failure) return;
+  try {
+    const content = failureReproduction(failure);
+    downloadReport(content,
+      'patch-' + failure.source + '-failure-operation-' +
+        failure.operationIndex + '-repro.json',
+      'application/json;charset=utf-8');
+    patchMessage('Failure reproduction bundle downloaded. No patch was executed.');
+  } catch (error) {
+    patchMessage('Failure bundle download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+failureIsolateButton.addEventListener('click', () => {
+  const failure = currentPatchFailure();
+  if (!failure || failure.json === null) return;
+  const isolated = JSON.stringify(
+    [failure.operationsToFailure[failure.operationIndex - 1]], null, 2);
+  try {
+    fitInput(isolated, 'Isolated failing instruction');
+    fitInput(failure.json, 'Last successful checkpoint');
+  } catch (error) {
+    patchMessage(error instanceof Error ? error.message :
+      'The isolated reproduction exceeds the input limit.', true);
+    return;
+  }
+  const label = patchSideLabel(failure.source);
+  if (!confirm(
+    'Replace the ' + label + ' editor with the last successful JSON and replace ' +
+    'the patch editor with only operation ' + failure.operationIndex + '? ' +
+    'The opposite editor will remain unchanged. No patch will run automatically.'
+  )) return;
+
+  // Cancel pending file imports and discard stale previews before replacing
+  // the two user-authorized editor values.
+  invalidateEditorImport(patchEditor(failure.source));
+  patchImportSequence++;
+  bundleImportSequence++;
+  patchEditor(failure.source).value = failure.json;
+  patchSource.value = isolated;
+  invalidateInspection();
+  resetReport();
+  updateResultTarget();
+  patchMessage('Isolated operation ' + failure.operationIndex + ' on the last good ' +
+    label + ' checkpoint. Select Preview applying patch to reproduce the failure.');
+});
+
 failureOpenStepButton.addEventListener('click', () => {
   const failure = currentPatchFailure();
   if (!failure || failure.json === null) return;
