@@ -269,3 +269,9 @@ a{color:#155a98}
 .failure-verification-filters input:focus-visible,.failure-verification-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.failure-verification-results .result-actions{width:100%;justify-content:flex-start}.failure-verification-filters label{width:100%}.failure-verification-filters select{flex:1 1 170px}}
 @media(prefers-color-scheme:dark){.failure-verification-results{border-color:#3b5068}.failure-verification-summary,.failure-verification-filters label{color:#b6cce3}.failure-verification-filters input,.failure-verification-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Offline evidence handoff; saved results are explicitly marked as archives. */
+#verification-evidence-context{margin:9px 0 12px;overflow-wrap:anywhere;white-space:pre-wrap}
+#download-verification-evidence{white-space:nowrap}
+.failure-verification-results .result-actions{flex-wrap:wrap}
+@media(max-width:700px){#download-verification-evidence{flex:1 1 165px}}

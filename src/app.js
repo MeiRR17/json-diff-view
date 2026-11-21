@@ -6,6 +6,7 @@ import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
+import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -150,7 +151,12 @@ const failureVerificationPageSummary = document.querySelector('#failure-verifica
 const copyFailureVerificationButton = document.querySelector('#copy-failure-verification');
 const downloadFailureVerificationJsonButton = document.querySelector('#download-failure-verification-json');
 const downloadFailureVerificationCsvButton = document.querySelector('#download-failure-verification-csv');
+const downloadVerificationEvidenceButton = document.querySelector('#download-verification-evidence');
+const importVerificationEvidenceButton = document.querySelector('#import-verification-evidence');
+const verificationEvidenceFile = document.querySelector('#verification-evidence-file');
+const verificationEvidenceContext = document.querySelector('#verification-evidence-context');
 
+let evidenceImportSequence = 0;
 let latestImportedFailure = null;
 let latestImportedVerification = null;
 let failureVerificationPage = 0;
@@ -1227,6 +1233,8 @@ function invalidateFailureVerification() {
   copyFailureVerificationButton.disabled = true;
   downloadFailureVerificationJsonButton.disabled = true;
   downloadFailureVerificationCsvButton.disabled = true;
+  downloadVerificationEvidenceButton.disabled = true;
+  verificationEvidenceContext.textContent = '';
 }
 function invalidateImportedFailure(message = 'Import a failure bundle before verifying it.') {
   invalidateFailureVerification();
@@ -1247,6 +1255,10 @@ function importedFailureCurrent() {
   return loaded;
 }
 function currentFailureVerification() {
+  // Archived evidence is independent of the editors. It is not a fresh replay.
+  if (latestImportedVerification?.archived) {
+    return latestImportedVerification.result;
+  }
   const loaded = importedFailureCurrent();
   if (!loaded) return null;
   if (!latestImportedVerification ||
@@ -1275,7 +1287,8 @@ function renderFailureVerification() {
   const visible = matches.slice(start, start + PAGE_SIZE);
   failureVerificationPanel.hidden = false;
   failureVerificationSummary.textContent =
-    (result.reproduced ? 'REPRODUCED' : 'INCONSISTENT BUNDLE') +
+    (latestImportedVerification.archived ? 'SAVED EVIDENCE (NOT REVERIFIED)' : 'CURRENT REPLAY') +
+    ' · ' + (result.reproduced ? 'REPRODUCED' : 'INCONSISTENT BUNDLE') +
     ' · Stored checkpoint ' + (result.checkpointMatches ? 'matches' : 'differs') +
     ' · Full prefix ' + (result.fullFailedAtExpected ? 'fails at expected step' :
       result.fullFailedAt === null ? 'does not fail' :
@@ -1390,6 +1403,76 @@ downloadFailureVerificationJsonButton.addEventListener('click',
 downloadFailureVerificationCsvButton.addEventListener('click',
   () => downloadFailureVerification('csv'));
 
+downloadVerificationEvidenceButton.addEventListener('click', () => {
+  const result = currentFailureVerification();
+  if (!result) return;
+  try {
+    const state = latestImportedVerification;
+    const text = state.archived ? state.text :
+      serializeVerificationEvidence(state.loaded, result);
+    downloadReport(text,
+      'failure-evidence-operation-' + result.expectedIndex + '.json',
+      'application/json;charset=utf-8');
+    importedFailureStatus.textContent = state.archived ?
+      'Saved evidence downloaded unchanged; no replay was run.' :
+      'Verification evidence exported with findings and operation metadata.';
+    importedFailureStatus.classList.remove('error');
+  } catch (error) {
+    importedFailureStatus.textContent = 'Evidence export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error');
+    importedFailureStatus.classList.add('error');
+  }
+});
+importVerificationEvidenceButton.addEventListener('click',
+  () => verificationEvidenceFile.click());
+verificationEvidenceFile.addEventListener('change', event => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (file) void loadVerificationEvidence(file);
+});
+async function loadVerificationEvidence(file) {
+  const request = ++evidenceImportSequence;
+  if (file.size > MAX_REPORT_EXPORT_BYTES) {
+    importedFailureStatus.textContent = 'Evidence file exceeds 8 MiB.';
+    importedFailureStatus.classList.add('error');
+    return;
+  }
+  try {
+    const contents = await file.text();
+    if (request !== evidenceImportSequence) return;
+    const imported = parseVerificationEvidence(contents);
+    // This is a report-viewing action, not a patch import or an execution.
+    invalidateImportedFailure();
+    latestImportedVerification = {
+      archived: true, result: imported.result, text: contents,
+      metadata: imported.metadata
+    };
+    failureVerificationPage = 0;
+    copyFailureVerificationButton.disabled = false;
+    downloadFailureVerificationJsonButton.disabled = false;
+    downloadFailureVerificationCsvButton.disabled = false;
+    downloadVerificationEvidenceButton.disabled = false;
+    const meta = imported.metadata;
+    verificationEvidenceContext.textContent = 'Archived finding — ' +
+      meta.source + ', ' + meta.replay_mode + ' replay, operation ' +
+      meta.failed_operation_index + ' (' + meta.operation_type + ') at ' +
+      meta.operation_path + (meta.operation_from === null ? '' :
+        ', from ' + meta.operation_from) +
+      '. Recorded reason: ' + meta.recorded_reason.slice(0, 500) +
+      '. These are imported claims, not freshly verified results.';
+    renderFailureVerification();
+    importedFailureStatus.textContent =
+      'Saved evidence opened read-only. No patch was applied or replayed, and no editor changed.';
+    importedFailureStatus.classList.remove('error');
+  } catch (error) {
+    if (request === evidenceImportSequence) {
+      importedFailureStatus.textContent = 'Could not load evidence: ' +
+        (error instanceof Error ? error.message : 'invalid file');
+      importedFailureStatus.classList.add('error');
+    }
+  }
+}
+
 verifyImportedFailureButton.addEventListener('click', () => {
   const loaded = importedFailureCurrent();
   if (!loaded) return;
@@ -1402,6 +1485,10 @@ verifyImportedFailureButton.addEventListener('click', () => {
     copyFailureVerificationButton.disabled = false;
     downloadFailureVerificationJsonButton.disabled = false;
     downloadFailureVerificationCsvButton.disabled = false;
+    downloadVerificationEvidenceButton.disabled = false;
+    verificationEvidenceContext.textContent =
+      'Current in-browser replay of imported failure bundle, operation ' +
+      result.expectedIndex + '.';
     renderFailureVerification();
     if (result.reproduced) {
       importedFailureStatus.textContent = 'REPRODUCED: failed operation ' +
