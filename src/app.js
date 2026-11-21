@@ -1,0 +1,207 @@
+import { diffJson, parseJson } from './diff.js';
+
+const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_PREVIEW_CHARS = 1200;
+
+const beforeEditor = document.querySelector('#before');
+const afterEditor = document.querySelector('#after');
+const status = document.querySelector('#status');
+const summary = document.querySelector('#summary');
+const changeRows = document.querySelector('#changes');
+const copyButton = document.querySelector('#copy');
+
+let latestReport = null;
+
+function setStatus(message, isError = false) {
+  status.textContent = message;
+  status.classList.toggle('error', isError);
+}
+
+function fitInput(source, label) {
+  const size = new TextEncoder().encode(source).byteLength;
+  if (size > MAX_BYTES) {
+    throw new RangeError(label + ' exceeds 2 MiB. Use a smaller document.');
+  }
+}
+
+function displayValue(value, exists) {
+  if (!exists) return '— not present —';
+  const json = JSON.stringify(value, null, 2);
+  if (json.length <= MAX_PREVIEW_CHARS) return json;
+  return json.slice(0, MAX_PREVIEW_CHARS) + '\n… (preview shortened; copy report for full value)';
+}
+
+function cell(tag, text, className = '') {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+function renderReport(report) {
+  changeRows.replaceChildren();
+  summary.replaceChildren();
+  summary.hidden = false;
+
+  for (const [label, n, cssClass] of [
+    ['Added', report.counts.added, 'added'],
+    ['Removed', report.counts.removed, 'removed'],
+    ['Changed', report.counts.changed, 'changed']
+  ]) {
+    const pill = cell('span', label + ': ' + n, 'pill ' + cssClass);
+    summary.append(pill);
+  }
+
+  if (report.truncated) {
+    summary.append(cell('span', 'Showing first 5,000 changes', 'pill'));
+  }
+
+  if (!report.changes.length) {
+    const row = document.createElement('tr');
+    const message = cell('td', 'No differences. Both JSON documents contain the same values.', 'empty');
+    message.colSpan = 3;
+    row.append(message);
+    changeRows.append(row);
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const change of report.changes) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+
+    const pathCell = document.createElement('td');
+    pathCell.append(cell('span', change.type, 'tag'));
+    pathCell.append(document.createElement('br'));
+    pathCell.append(cell('span', change.path, 'path'));
+    row.append(pathCell);
+
+    const before = document.createElement('td');
+    before.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const after = document.createElement('td');
+    after.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(before, after);
+    fragment.append(row);
+  }
+  changeRows.append(fragment);
+}
+
+function resetReport() {
+  latestReport = null;
+  copyButton.disabled = true;
+  summary.hidden = true;
+  summary.replaceChildren();
+  const row = document.createElement('tr');
+  const message = cell('td', 'Differences will appear here.', 'empty');
+  message.colSpan = 3;
+  row.append(message);
+  changeRows.replaceChildren(row);
+}
+
+function compare() {
+  try {
+    fitInput(beforeEditor.value, 'Before');
+    fitInput(afterEditor.value, 'After');
+    const left = parseJson(beforeEditor.value, 'Before');
+    const right = parseJson(afterEditor.value, 'After');
+    const report = diffJson(left, right);
+    latestReport = report;
+    renderReport(report);
+    copyButton.disabled = false;
+    const count = report.changes.length;
+    setStatus(
+      count === 0 ? 'Comparison complete: no differences.' :
+      'Comparison complete: ' + count + ' difference' + (count === 1 ? '' : 's') +
+      (report.truncated ? ' shown (report truncated).' : '.')
+    );
+  } catch (error) {
+    resetReport();
+    setStatus(error instanceof Error ? error.message : 'Could not compare JSON.', true);
+  }
+}
+
+async function importFile(file, editor, label) {
+  if (!file) return;
+  if (file.size > MAX_BYTES) {
+    setStatus(label + ' file exceeds 2 MiB.', true);
+    return;
+  }
+  try {
+    editor.value = await file.text();
+    resetReport();
+    setStatus(label + ' file loaded locally. Select Compare JSON to see differences.');
+  } catch {
+    setStatus('Could not read the selected ' + label.toLowerCase() + ' file.', true);
+  }
+}
+
+const sampleBefore = {
+  project: 'JSON Diff View',
+  version: 1,
+  settings: { locale: 'en', theme: 'light', telemetry: false },
+  users: [{ id: 1, role: 'viewer' }, { id: 2, role: 'editor' }],
+  deprecated: true
+};
+const sampleAfter = {
+  project: 'JSON Diff View',
+  version: 2,
+  settings: { locale: 'he', theme: 'light', telemetry: false },
+  users: [{ id: 1, role: 'editor' }, { id: 2, role: 'editor' }, { id: 3, role: 'viewer' }],
+  documentation: 'ready'
+};
+
+document.querySelector('#compare').addEventListener('click', compare);
+document.querySelector('#swap').addEventListener('click', () => {
+  [beforeEditor.value, afterEditor.value] = [afterEditor.value, beforeEditor.value];
+  resetReport();
+  setStatus('Sides swapped. Select Compare JSON to refresh the report.');
+});
+document.querySelector('#clear').addEventListener('click', () => {
+  beforeEditor.value = '';
+  afterEditor.value = '';
+  resetReport();
+  setStatus('Editors cleared.');
+  beforeEditor.focus();
+});
+document.querySelector('#load-sample').addEventListener('click', () => {
+  beforeEditor.value = JSON.stringify(sampleBefore, null, 2);
+  afterEditor.value = JSON.stringify(sampleAfter, null, 2);
+  compare();
+});
+document.querySelector('#before-file').addEventListener('change', event => {
+  void importFile(event.target.files?.[0], beforeEditor, 'Before');
+  event.target.value = '';
+});
+document.querySelector('#after-file').addEventListener('change', event => {
+  void importFile(event.target.files?.[0], afterEditor, 'After');
+  event.target.value = '';
+});
+
+for (const editor of [beforeEditor, afterEditor]) {
+  editor.addEventListener('input', () => {
+    resetReport();
+    setStatus('Document edited. Select Compare JSON to refresh the report.');
+  });
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    compare();
+  }
+});
+
+copyButton.addEventListener('click', async () => {
+  if (!latestReport) return;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify({
+      format: 'json-diff-view-report',
+      counts: latestReport.counts,
+      truncated: latestReport.truncated,
+      changes: latestReport.changes
+    }, null, 2));
+    setStatus('Change report copied to clipboard.');
+  } catch {
+    setStatus('Clipboard access failed. Try using HTTPS or a local web server.', true);
+  }
+});
