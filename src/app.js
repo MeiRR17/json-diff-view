@@ -26,6 +26,14 @@ let latestReport = null;
 let latestPatch = null;
 let lastApplied = null;
 let patchImportSequence = 0;
+const editorImportVersions = new WeakMap([[beforeEditor, 0], [afterEditor, 0]]);
+function invalidateEditorImport(editor) {
+  editorImportVersions.set(editor, editorImportVersions.get(editor) + 1);
+}
+function invalidateAllEditorImports() {
+  invalidateEditorImport(beforeEditor);
+  invalidateEditorImport(afterEditor);
+}
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -165,16 +173,30 @@ function compare() {
 
 async function importFile(file, editor, label) {
   if (!file) return;
+  invalidateEditorImport(editor);
+  const request = editorImportVersions.get(editor);
+  const previousValue = editor.value;
   if (file.size > MAX_BYTES) {
     setStatus(label + ' file exceeds 2 MiB.', true);
     return;
   }
   try {
-    editor.value = await file.text();
+    const contents = await file.text();
+    // Another import or an intervening editor change wins.
+    if (editorImportVersions.get(editor) !== request) return;
+    fitInput(contents, label + ' file');
+    parseJson(contents, label + ' file');
+    if (previousValue.trim() && previousValue !== contents &&
+        !confirm('Replace the existing ' + label + ' document with the imported file?')) return;
+    if (editorImportVersions.get(editor) !== request) return;
+    editor.value = contents;
+    invalidateEditorImport(editor);
     resetReport();
     setStatus(label + ' file loaded locally. Select Compare JSON to see differences.');
-  } catch {
-    setStatus('Could not read the selected ' + label.toLowerCase() + ' file.', true);
+  } catch (error) {
+    if (editorImportVersions.get(editor) === request) {
+      setStatus(label + ' import failed: ' + (error instanceof Error ? error.message : 'File could not be read.'), true);
+    }
   }
 }
 
@@ -195,11 +217,13 @@ const sampleAfter = {
 
 document.querySelector('#compare').addEventListener('click', compare);
 document.querySelector('#swap').addEventListener('click', () => {
+  invalidateAllEditorImports();
   [beforeEditor.value, afterEditor.value] = [afterEditor.value, beforeEditor.value];
   resetReport();
   setStatus('Sides swapped. Select Compare JSON to refresh the report.');
 });
 document.querySelector('#clear').addEventListener('click', () => {
+  invalidateAllEditorImports();
   beforeEditor.value = '';
   afterEditor.value = '';
   patchSource.value = '';
@@ -209,6 +233,7 @@ document.querySelector('#clear').addEventListener('click', () => {
   beforeEditor.focus();
 });
 document.querySelector('#load-sample').addEventListener('click', () => {
+  invalidateAllEditorImports();
   beforeEditor.value = JSON.stringify(sampleBefore, null, 2);
   afterEditor.value = JSON.stringify(sampleAfter, null, 2);
   compare();
@@ -224,6 +249,7 @@ document.querySelector('#after-file').addEventListener('change', event => {
 
 for (const editor of [beforeEditor, afterEditor]) {
   editor.addEventListener('input', () => {
+    invalidateEditorImport(editor);
     resetReport();
     setStatus('Document edited. Select Compare JSON to refresh the report.');
   });
@@ -343,6 +369,7 @@ patchSource.addEventListener('input', () => {
 });
 useGeneratedButton.addEventListener('click', () => {
   if (!latestPatch) return;
+  patchImportSequence++;
   patchSource.value = serializeJsonPatch(latestPatch);
   invalidatePatchResult();
   patchMessage('Generated patch copied into the patch editor. Select Preview applying patch.');
@@ -356,6 +383,7 @@ sendResultButton.addEventListener('click', () => {
   }
   if (afterEditor.value.trim() && afterEditor.value !== lastApplied.json &&
       !confirm('Replace the current After editor with the patch result?')) return;
+  invalidateEditorImport(afterEditor);
   afterEditor.value = lastApplied.json;
   resetReport();
   compare();
