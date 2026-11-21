@@ -96,3 +96,18 @@ a{color:#155a98}
 .patch-direction-control select:focus-visible,.patch-base-control select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 .patch-base-control{margin:14px 0}
 @media(prefers-color-scheme:dark){.patch-direction-control label,.patch-base-control label{color:#b6cce3}.patch-direction-control select,.patch-base-control select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Source-to-preview impact review. Rows are bounded to one page of 100. */
+.patch-impact{margin-top:22px;padding-top:20px;border-top:1px solid #d8e1ed}
+.patch-impact h3{font-size:1rem;margin:0}
+.patch-impact .section-heading{margin-bottom:8px}
+.patch-impact .hint{margin-bottom:11px}
+.impact-summary{color:#3d5471;font-size:.87rem;font-weight:650;margin:10px 0}
+.impact-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:10px 0 14px}
+.impact-filters label{font-size:.84rem;font-weight:650;color:#3d5471}
+.impact-filters input,.impact-filters select{font:inherit;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px;padding:9px 11px;min-height:39px;max-width:100%}
+.impact-filters input{flex:2 1 180px;min-width:140px}
+.impact-filters select{flex:0 1 150px}
+.impact-filters input:focus-visible,.impact-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+@media(max-width:700px){.impact-filters label{width:100%}.impact-filters select{flex:1 1 150px}}
+@media(prefers-color-scheme:dark){.patch-impact{border-color:#3b5068}.impact-summary,.impact-filters label{color:#b6cce3}.impact-filters input,.impact-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}

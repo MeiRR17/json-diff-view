@@ -134,11 +134,41 @@
         <button class="button subtle" type="button" id="download-result" disabled>↓ Download result.json</button>
       </div>
       <p id="patch-status" class="status" role="status" aria-live="polite">This tool does not execute code or upload JSON.</p>
+      <section class="patch-impact" id="patch-impact" aria-labelledby="impact-heading" hidden>
+        <div class="section-heading">
+          <h3 id="impact-heading">Patch impact review</h3>
+          <button class="button subtle" type="button" id="copy-impact" disabled>Copy full impact report</button>
+        </div>
+        <p class="hint">Changes between the selected source and the detached preview, not the patch instruction list. The original JSON editors are unchanged.</p>
+        <p class="impact-summary" id="impact-summary" role="status" aria-live="polite"></p>
+        <div class="impact-filters" role="group" aria-label="Filter patch impact">
+          <label for="impact-filter-path">JSON path contains</label>
+          <input type="search" id="impact-filter-path" placeholder="e.g. $.items" autocomplete="off">
+          <label for="impact-filter-type">Type</label>
+          <select id="impact-filter-type">
+            <option value="all">All types</option>
+            <option value="added">Added</option>
+            <option value="removed">Removed</option>
+            <option value="changed">Changed</option>
+          </select>
+        </div>
+        <div class="results-scroll">
+          <table class="diff-table">
+            <thead><tr><th scope="col">JSON path</th><th scope="col">Source</th><th scope="col">Preview</th></tr></thead>
+            <tbody id="impact-rows"></tbody>
+          </table>
+        </div>
+        <nav class="results-nav" id="impact-nav" aria-label="Patch impact pages" hidden>
+          <button class="button subtle" type="button" id="impact-previous">Previous page</button>
+          <span id="impact-page-summary" aria-live="polite"></span>
+          <button class="button subtle" type="button" id="impact-next">Next page</button>
+        </nav>
+      </section>
     </section>
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>

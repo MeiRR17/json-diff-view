@@ -33,12 +33,24 @@ const importPatchButton = document.querySelector('#import-patch');
 const patchFile = document.querySelector('#patch-file');
 const sendResultButton = document.querySelector('#send-result');
 const downloadResultButton = document.querySelector('#download-result');
+const impactPanel = document.querySelector('#patch-impact');
+const impactSummary = document.querySelector('#impact-summary');
+const impactRows = document.querySelector('#impact-rows');
+const impactFilterPath = document.querySelector('#impact-filter-path');
+const impactFilterType = document.querySelector('#impact-filter-type');
+const impactNav = document.querySelector('#impact-nav');
+const impactPrevious = document.querySelector('#impact-previous');
+const impactNext = document.querySelector('#impact-next');
+const impactPageSummary = document.querySelector('#impact-page-summary');
+const copyImpactButton = document.querySelector('#copy-impact');
 
 let latestReport = null;
 let currentPage = 0;
 let latestPatch = null;
 let latestComparison = null;
 let lastApplied = null;
+let latestImpact = null;
+let impactPage = 0;
 let patchImportSequence = 0;
 const editorImportVersions = new WeakMap([[beforeEditor, 0], [afterEditor, 0]]);
 function invalidateEditorImport(editor) {
@@ -160,6 +172,15 @@ function invalidatePatchResult() {
   patchResult.value = '';
   sendResultButton.disabled = true;
   downloadResultButton.disabled = true;
+  latestImpact = null;
+  impactPage = 0;
+  impactPanel.hidden = true;
+  impactRows.replaceChildren();
+  impactSummary.textContent = '';
+  impactFilterPath.value = '';
+  impactFilterType.value = 'all';
+  impactNav.hidden = true;
+  copyImpactButton.disabled = true;
 }
 function resetReport() {
   invalidatePatchResult();
@@ -420,6 +441,97 @@ downloadPatchButton.addEventListener('click', () => {
 });
 
 
+// Impact is descriptive: it compares the chosen source with the detached
+// preview result. It never changes the main comparison or either editor.
+function renderPatchImpact() {
+  if (!latestImpact) return;
+  const { report, source } = latestImpact;
+  const needle = impactFilterPath.value.trim().toLocaleLowerCase();
+  const type = impactFilterType.value;
+  const matches = report.changes.filter(change =>
+    (type === 'all' || change.type === type) &&
+    (!needle || change.path.toLocaleLowerCase().includes(needle))
+  );
+  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  impactPage = Math.min(impactPage, pageCount - 1);
+  const start = impactPage * PAGE_SIZE;
+  const visible = matches.slice(start, start + PAGE_SIZE);
+  const counts = report.counts;
+  impactPanel.hidden = false;
+  impactSummary.textContent = patchSideLabel(source) + ' → preview: ' +
+    counts.added + ' added, ' + counts.removed + ' removed, ' +
+    counts.changed + ' changed. ' + matches.length + ' of ' +
+    report.changes.length + ' recorded changes match.' +
+    (report.truncated ? ' Impact report truncated after 5,000 changes.' : '');
+  copyImpactButton.disabled = false;
+  impactNav.hidden = matches.length <= PAGE_SIZE;
+  impactPrevious.disabled = impactPage === 0;
+  impactNext.disabled = impactPage >= pageCount - 1;
+  impactPageSummary.textContent = 'Page ' + (impactPage + 1) + ' of ' + pageCount;
+
+  if (!visible.length) {
+    const row = document.createElement('tr');
+    const empty = cell('td', report.changes.length ?
+      'No impact paths match the filters.' : 'The patch makes no structural changes.', 'empty');
+    empty.colSpan = 3;
+    row.append(empty);
+    impactRows.replaceChildren(row);
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (const change of visible) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+    const pathCell = document.createElement('td');
+    pathCell.append(cell('span', change.type, 'tag'));
+    pathCell.append(document.createElement('br'));
+    pathCell.append(cell('span', change.path, 'path'));
+    const leftCell = document.createElement('td');
+    leftCell.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const rightCell = document.createElement('td');
+    rightCell.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(pathCell, leftCell, rightCell);
+    fragment.append(row);
+  }
+  impactRows.replaceChildren(fragment);
+}
+function refreshImpactFilter() {
+  impactPage = 0;
+  renderPatchImpact();
+}
+impactFilterPath.addEventListener('input', refreshImpactFilter);
+impactFilterType.addEventListener('change', refreshImpactFilter);
+impactPrevious.addEventListener('click', () => {
+  if (!latestImpact || impactPage === 0) return;
+  impactPage--;
+  renderPatchImpact();
+});
+impactNext.addEventListener('click', () => {
+  if (!latestImpact) return;
+  impactPage++;
+  renderPatchImpact();
+});
+copyImpactButton.addEventListener('click', async () => {
+  if (!latestImpact || !previewIsCurrent()) {
+    invalidatePatchResult();
+    patchMessage('Preview is stale. Apply the patch again before copying impact.', true);
+    return;
+  }
+  const { source, report } = latestImpact;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify({
+      format: 'json-diff-view-patch-impact',
+      source: patchSideLabel(source),
+      counts: report.counts,
+      truncated: report.truncated,
+      changes: report.changes
+    }, null, 2));
+    patchMessage('Full impact report copied; on-screen filters do not affect the export.');
+  } catch {
+    patchMessage('Could not copy impact report. Check clipboard permissions.', true);
+  }
+});
+
 function patchMessage(message, isError = false) {
   patchStatus.textContent = message;
   patchStatus.classList.toggle('error', isError);
@@ -462,8 +574,24 @@ function previewPatch() {
     patchResult.value = json;
     sendResultButton.disabled = false;
     downloadResultButton.disabled = false;
+    let impactWarning = '';
+    try {
+      // The impact report observes the final result, including move/copy.
+      // A large/deep diff may fail without invalidating a valid patch result.
+      latestImpact = { source, report: diffJson(documentSource, transformed) };
+      renderPatchImpact();
+    } catch (impactError) {
+      latestImpact = null;
+      impactPanel.hidden = false;
+      copyImpactButton.disabled = true;
+      impactNav.hidden = true;
+      impactRows.replaceChildren();
+      impactSummary.textContent = 'Impact report unavailable: ' +
+        (impactError instanceof Error ? impactError.message : 'comparison limit exceeded');
+      impactWarning = ' Impact report unavailable; the detached result is still available.';
+    }
     patchMessage('Patch preview created on a detached copy of ' + sourceLabel +
-      '. No editor content changed.');
+      '. No editor content changed.' + impactWarning);
   } catch (error) {
     patchMessage(error instanceof Error ? error.message : 'Unable to apply JSON Patch.', true);
   }
