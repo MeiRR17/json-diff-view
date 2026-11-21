@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Compare two JSON documents locally, with readable side-by-side changes and no upload.">
+  <title>JSON Diff View — Compare JSON in your browser</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./src/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#results">Skip to differences</a>
+  <header class="site-header">
+    <div class="container">
+      <div class="brand">JSON <span>Diff View</span></div>
+      <p class="subtitle">See exactly what changed between two JSON documents.</p>
+      <p class="privacy">Local by design: your JSON stays in this browser. No server, account, or tracker.</p>
+    </div>
+  </header>
+  <main class="container">
+    <section aria-labelledby="editor-heading">
+      <div class="section-heading">
+        <h1 id="editor-heading">Compare documents</h1>
+        <button class="button subtle" type="button" id="load-sample">Load sample</button>
+      </div>
+      <div class="editors">
+        <div class="editor">
+          <div class="editor-heading">
+            <label for="before">Before</label>
+            <label class="file-button" for="before-file">Open .json file</label>
+            <input id="before-file" type="file" accept=".json,application/json,text/plain" hidden>
+          </div>
+          <textarea id="before" spellcheck="false" aria-describedby="before-tip" placeholder='{"version": 1, "active": true}'></textarea>
+          <p id="before-tip" class="hint">JSON object, array, string, number, boolean, or null.</p>
+        </div>
+        <div class="editor">
+          <div class="editor-heading">
+            <label for="after">After</label>
+            <label class="file-button" for="after-file">Open .json file</label>
+            <input id="after-file" type="file" accept=".json,application/json,text/plain" hidden>
+          </div>
+          <textarea id="after" spellcheck="false" aria-describedby="after-tip" placeholder='{"version": 2, "active": false}'></textarea>
+          <p id="after-tip" class="hint">Arrays are compared by index; object keys by name.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="button primary" type="button" id="compare">Compare JSON</button>
+        <button class="button" type="button" id="swap">Swap sides</button>
+        <button class="button" type="button" id="clear">Clear</button>
+        <span class="shortcut">Tip: Ctrl/⌘ + Enter to compare</span>
+      </div>
+      <p id="status" class="status" aria-live="polite" role="status">Paste two JSON documents or load a sample to begin.</p>
+    </section>
+    <section id="results" aria-labelledby="results-heading">
+      <div class="section-heading">
+        <h2 id="results-heading">Differences</h2>
+        <button class="button subtle" type="button" id="copy" disabled>Copy change report</button>
+      </div>
+      <div id="summary" class="summary" aria-live="polite" hidden></div>
+      <div class="results-scroll">
+        <table class="diff-table">
+          <thead><tr><th scope="col">JSON path</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+          <tbody id="changes">
+            <tr><td class="empty" colspan="3">Differences will appear here.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <aside class="note">
+      <h2>How comparison works</h2>
+      <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the report describes changes rather than generating a JSON Patch.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports.</p>
+    </aside>
+  </main>
+  <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>
+</body>
+</html>
