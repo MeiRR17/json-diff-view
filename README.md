@@ -12,6 +12,7 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 - Load an illustrative sample, swap documents, or clear editors.
 - Copy a JSON change report to your clipboard.
 - Export a **standards-based RFC 6902 JSON Patch** as a bare JSON array, through clipboard or a downloadable `.jsonpatch` file.
+- Preview applying a JSON Patch to a **detached copy** of the Before document, inspect the resulting JSON, download it, or explicitly send it to the After editor for comparison.
 - Keyboard shortcut: **Ctrl+Enter** (Windows/Linux) or **⌘+Enter** (macOS).
 - Responsive layout with keyboard-accessible controls, light and dark themes.
 
@@ -37,6 +38,11 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 - The **separate JSON Patch export** emits RFC 6902 `add`, `remove`, and `replace` operations (without `move`, `copy`, or `test`). Object paths use JSON Pointer escaping (`~0` for `~`, `~1` for `/`). The root document path is the empty string.
 - Array changes are index-based: common positions are compared, excess trailing entries are removed from highest index to lowest, and new trailing entries are added in increasing index order. This does not infer semantic moves or record IDs.
 - If the transformation needs more than 5,000 operations, the tool refuses to export a potentially incomplete patch. Review any patch before applying it to production data.
+- The Patch preview accepts **only** the \`add\`, \`remove\`, and \`replace\` operation subset. It rejects \`move\`, \`copy\`, \`test\`, invalid JSON Pointer escapes, missing paths and invalid array indices, rather than silently applying incorrect operations.
+- An empty path targets the document root for add/replace. Removing the root document is unsupported. Arrays may be appended with \`-\` in an add operation; array indexes are otherwise canonical decimals.
+- Patch application never mutates the input JSON value. Object property reads require own properties; assignments use safe property definition for keys such as \`__proto__\`. Invalid operations abort without returning a partially modified document.
+- The result preview is capped at **2 MiB** and is not written into either editor until **Send result to After** is clicked. If After already has content, the tool requests confirmation before replacing it.
+
 - Input is limited to **2 MiB per editor**. Traversal has limits of 100,000 visited nodes, nesting depth 200 and 5,000 shown differences. A truncated report is explicitly marked as such.
 - Long values in the visual table have shortened previews; the copied report contains their full content.
 
@@ -47,6 +53,7 @@ index.html       Accessible editor and diff table
 styles.css       Responsive layout, light/dark themes
 src/diff.js      Pure structural comparison and JSON parsing
 src/patch.js     RFC 6902 patch generation and serialization
+src/apply.js     Detached, strict JSON Patch application with own-property path traversal
 src/app.js       Browser interactions, file import, report rendering
 \`\`\`
 
