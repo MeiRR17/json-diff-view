@@ -147,3 +147,14 @@ a{color:#155a98}
 .patch-step-review #patch-step-status{margin:10px 0 0}
 @media(max-width:700px){.patch-step-controls label{width:100%}.patch-step-controls .button{flex:1 1 140px}}
 @media(prefers-color-scheme:dark){.patch-step-review{border-color:#3b5068}.patch-step-controls label,.patch-step-result-label{color:#b6cce3}.patch-step-controls input{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Operation-ledger drilldown and isolated per-step structural impact. */
+.inspection-table{min-width:970px}
+.inspection-table th:nth-child(7){width:12%}
+.inspection-table th:nth-child(5){width:20%}
+.inspection-table th:nth-child(6){width:17%}
+.inspection-step-button{font-size:.75rem;padding:6px 8px;white-space:nowrap}
+.patch-step-impact{margin-top:16px;padding-top:14px;border-top:1px solid #d8e1ed}
+.patch-step-impact h4{font-size:.95rem;margin:0 0 8px}
+.step-impact-summary{font-size:.85rem;color:#3d5471;font-weight:650;margin:10px 0}
+@media(prefers-color-scheme:dark){.patch-step-impact{border-color:#3b5068}.step-impact-summary{color:#b6cce3}}

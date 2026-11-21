@@ -66,6 +66,13 @@ const stepPreviousButton = document.querySelector('#patch-step-previous');
 const stepNextButton = document.querySelector('#patch-step-next');
 const stepResultEditor = document.querySelector('#patch-step-result');
 const stepStatus = document.querySelector('#patch-step-status');
+const stepImpactPanel = document.querySelector('#patch-step-impact');
+const stepImpactSummary = document.querySelector('#patch-step-impact-summary');
+const stepImpactRows = document.querySelector('#patch-step-impact-rows');
+const stepImpactNav = document.querySelector('#patch-step-impact-nav');
+const stepImpactPrevious = document.querySelector('#patch-step-impact-previous');
+const stepImpactNext = document.querySelector('#patch-step-impact-next');
+const stepImpactPageSummary = document.querySelector('#patch-step-impact-page-summary');
 
 let latestReport = null;
 let currentPage = 0;
@@ -77,6 +84,8 @@ let impactPage = 0;
 let patchImportSequence = 0;
 let latestInspection = null;
 let inspectionPage = 0;
+let latestStepImpact = null;
+let stepImpactPage = 0;
 const editorImportVersions = new WeakMap([[beforeEditor, 0], [afterEditor, 0]]);
 function invalidateEditorImport(editor) {
   editorImportVersions.set(editor, editorImportVersions.get(editor) + 1);
@@ -198,7 +207,67 @@ function invalidateStepPreview(message = 'Select a step and preview the detached
   stepStatus.classList.remove('error');
   stepPreviousButton.disabled = true;
   stepNextButton.disabled = true;
+  latestStepImpact = null;
+  stepImpactPage = 0;
+  stepImpactPanel.hidden = true;
+  stepImpactRows.replaceChildren();
+  stepImpactSummary.textContent = '';
+  stepImpactNav.hidden = true;
 }
+
+function renderStepImpact() {
+  if (!latestStepImpact) return;
+  const { report, count } = latestStepImpact;
+  const pages = Math.max(1, Math.ceil(report.changes.length / PAGE_SIZE));
+  stepImpactPage = Math.min(stepImpactPage, pages - 1);
+  const start = stepImpactPage * PAGE_SIZE;
+  const visible = report.changes.slice(start, start + PAGE_SIZE);
+  const counts = report.counts;
+
+  stepImpactPanel.hidden = false;
+  stepImpactSummary.textContent = count === 0 ?
+    'Step 0: no operation executed, so there is no change.' :
+    'Effect of operation ' + count + ': ' + counts.added + ' added, ' +
+    counts.removed + ' removed, ' + counts.changed + ' changed.' +
+    (report.truncated ? ' Showing only the first 5,000 differences.' : '');
+  stepImpactNav.hidden = report.changes.length <= PAGE_SIZE;
+  stepImpactPrevious.disabled = stepImpactPage === 0;
+  stepImpactNext.disabled = stepImpactPage >= pages - 1;
+  stepImpactPageSummary.textContent = 'Page ' + (stepImpactPage + 1) + ' of ' + pages;
+
+  const fragment = document.createDocumentFragment();
+  if (!visible.length) {
+    const row = document.createElement('tr');
+    const message = cell('td', 'No structural difference in this operation (for example a successful test).', 'empty');
+    message.colSpan = 3;
+    row.append(message);
+    fragment.append(row);
+  } else for (const change of visible) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+    const pathCell = document.createElement('td');
+    pathCell.append(cell('span', change.type, 'tag'));
+    pathCell.append(document.createElement('br'));
+    pathCell.append(cell('span', change.path, 'path'));
+    const beforeCell = document.createElement('td');
+    beforeCell.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const afterCell = document.createElement('td');
+    afterCell.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(pathCell, beforeCell, afterCell);
+    fragment.append(row);
+  }
+  stepImpactRows.replaceChildren(fragment);
+}
+stepImpactPrevious.addEventListener('click', () => {
+  if (!latestStepImpact || stepImpactPage === 0) return;
+  stepImpactPage--;
+  renderStepImpact();
+});
+stepImpactNext.addEventListener('click', () => {
+  if (!latestStepImpact) return;
+  stepImpactPage++;
+  renderStepImpact();
+});
 
 function stepMessage(message, isError = false) {
   stepStatus.textContent = message;
@@ -239,9 +308,27 @@ function previewPatchStep(selectedCount) {
     const current = count === 0 ? 'Original document (no operations)' :
       'Step ' + count + ': ' + patch[count - 1].op +
       ' ' + (patch[count - 1].path || '(root)');
+
+    // Compare the snapshots immediately before and after this one operation.
+    // A complex structural comparison can be unavailable without losing the
+    // valid intermediate document shown above.
+    let impactNotice = '';
+    try {
+      const previous = count ? applyJsonPatchPrefix(document, patch, count - 1) : document;
+      latestStepImpact = { report: diffJson(previous, outcome), count };
+      renderStepImpact();
+    } catch (impactError) {
+      latestStepImpact = null;
+      stepImpactPanel.hidden = false;
+      stepImpactRows.replaceChildren();
+      stepImpactNav.hidden = true;
+      stepImpactSummary.textContent = 'Step effect unavailable: ' +
+        (impactError instanceof Error ? impactError.message : 'comparison limit exceeded');
+      impactNotice = ' Step effect details unavailable.';
+    }
     stepMessage(current + '. Applied ' + count + ' of ' + patch.length +
       ' operations to a detached copy of ' + sourceLabel +
-      '. No JSON editor was modified.');
+      '. No JSON editor was modified.' + impactNotice);
   } catch (error) {
     stepMessage('Cannot preview step: ' +
       (error instanceof Error ? error.message : 'invalid patch'), true);
@@ -300,7 +387,7 @@ function renderInspection() {
     const row = document.createElement('tr');
     const message = cell('td', rows.length ?
       'No patch operations match your filters.' : 'The patch has no operations.', 'empty');
-    message.colSpan = 6;
+    message.colSpan = 7;
     row.append(message);
     fragment.append(row);
   } else for (const operation of visible) {
@@ -312,6 +399,18 @@ function renderInspection() {
     ]) {
       row.append(cell('td', value));
     }
+    const actionCell = document.createElement('td');
+    const action = cell('button', 'View step', 'button subtle inspection-step-button');
+    action.type = 'button';
+    action.setAttribute('aria-label', 'Preview document after operation ' + operation.index);
+    action.addEventListener('click', () => {
+      previewPatchStep(operation.index);
+      document.querySelector('#patch-step-heading').scrollIntoView({
+        behavior: 'smooth', block: 'start'
+      });
+    });
+    actionCell.append(action);
+    row.append(actionCell);
     fragment.append(row);
   }
   inspectionRows.replaceChildren(fragment);

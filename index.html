@@ -136,7 +136,7 @@
       </div>
       <section class="patch-inspection" id="patch-inspection" aria-labelledby="inspection-heading" hidden>
         <h3 id="inspection-heading">Patch operation ledger</h3>
-        <p class="hint">Basic shape warnings are not full validation. The detached preview checks actual paths, values and ordering.</p>
+        <p class="hint">Basic shape warnings are not full validation. Choose View step on an operation to inspect its intermediate result and structural effect. The detached preview checks actual paths, values and ordering.</p>
         <p class="inspection-summary" id="inspection-summary" role="status" aria-live="polite"></p>
         <div class="inspection-filters" role="group" aria-label="Filter patch operations">
           <label for="inspection-type">Operation</label>
@@ -155,7 +155,7 @@
         </div>
         <div class="results-scroll">
           <table class="diff-table inspection-table">
-            <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Path</th><th scope="col">From</th><th scope="col">Value preview</th><th scope="col">Shape warnings</th></tr></thead>
+            <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Path</th><th scope="col">From</th><th scope="col">Value preview</th><th scope="col">Shape warnings</th><th scope="col">Preview</th></tr></thead>
             <tbody id="inspection-rows"></tbody>
           </table>
         </div>
@@ -178,6 +178,22 @@
         <label class="patch-step-result-label" for="patch-step-result">Document at selected step (read-only)</label>
         <textarea id="patch-step-result" rows="7" readonly spellcheck="false" placeholder="Preview a step to inspect the intermediate document."></textarea>
         <p class="status" id="patch-step-status" role="status" aria-live="polite">Select a step and preview the detached document.</p>
+        <section class="patch-step-impact" id="patch-step-impact" aria-labelledby="patch-step-impact-heading" hidden>
+          <h4 id="patch-step-impact-heading">Effect of this operation</h4>
+          <p class="hint">Structural changes caused by the selected operation only, comparing the document just before and just after that instruction.</p>
+          <p class="step-impact-summary" id="patch-step-impact-summary" role="status" aria-live="polite"></p>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">JSON path</th><th scope="col">Previous step</th><th scope="col">Selected step</th></tr></thead>
+              <tbody id="patch-step-impact-rows"></tbody>
+            </table>
+          </div>
+          <nav class="results-nav" id="patch-step-impact-nav" aria-label="Step change pages" hidden>
+            <button class="button subtle" type="button" id="patch-step-impact-previous">Previous page</button>
+            <span id="patch-step-impact-page-summary" aria-live="polite"></span>
+            <button class="button subtle" type="button" id="patch-step-impact-next">Next page</button>
+          </nav>
+        </section>
       </section>
       <div class="actions">
         <button class="button primary" type="button" id="preview-patch">Preview applying patch</button>
@@ -223,7 +239,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document after any selected number of instructions without executing later operations. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>
