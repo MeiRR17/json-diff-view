@@ -165,6 +165,20 @@
           <button class="button subtle" type="button" id="inspection-next">Next page</button>
         </nav>
       </section>
+      <section class="patch-step-review" aria-labelledby="patch-step-heading">
+        <h3 id="patch-step-heading">Step-by-step patch preview</h3>
+        <p class="hint">Preview the document after the first N instructions, including 0 for the unchanged source. This runs on a detached copy and does not apply later operations.</p>
+        <div class="patch-step-controls">
+          <label for="patch-step-count">Operations to apply</label>
+          <input id="patch-step-count" type="number" min="0" max="5000" step="1" value="1">
+          <button class="button subtle" type="button" id="patch-step-preview">Preview through step</button>
+          <button class="button subtle" type="button" id="patch-step-previous" disabled>Previous step</button>
+          <button class="button subtle" type="button" id="patch-step-next" disabled>Next step</button>
+        </div>
+        <label class="patch-step-result-label" for="patch-step-result">Document at selected step (read-only)</label>
+        <textarea id="patch-step-result" rows="7" readonly spellcheck="false" placeholder="Preview a step to inspect the intermediate document."></textarea>
+        <p class="status" id="patch-step-status" role="status" aria-live="polite">Select a step and preview the detached document.</p>
+      </section>
       <div class="actions">
         <button class="button primary" type="button" id="preview-patch">Preview applying patch</button>
         <button class="button subtle" type="button" id="send-result" disabled>Send result to After</button>
@@ -209,7 +223,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document after any selected number of instructions without executing later operations. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>

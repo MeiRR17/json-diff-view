@@ -134,3 +134,16 @@ a{color:#155a98}
 .inspection-table tr.inspection-warning{background:#fff4e5}
 @media(max-width:680px){.inspection-filters label{width:100%}}
 @media(prefers-color-scheme:dark){.patch-inspection{border-color:#3b5068}.inspection-summary,.inspection-filters label{color:#b6cce3}.inspection-filters select,.inspection-filters input{color:#e3f1ff;background:#19293b;border-color:#536783}.inspection-table tr.inspection-warning{background:#46391f}}
+
+/* Prefix-based detached patch debugging, without mutating either input. */
+.patch-step-review{margin:20px 0 6px;padding:16px 0;border-top:1px solid #d8e1ed}
+.patch-step-review h3{font-size:1rem;margin:0}
+.patch-step-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0}
+.patch-step-controls label,.patch-step-result-label{font-size:.84rem;font-weight:650;color:#3d5471}
+.patch-step-controls input{max-width:120px;min-width:85px;padding:9px 11px;font:inherit;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px}
+.patch-step-controls input:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.patch-step-result-label{display:block;margin:10px 0 8px}
+.patch-step-review #patch-step-result{min-height:150px}
+.patch-step-review #patch-step-status{margin:10px 0 0}
+@media(max-width:700px){.patch-step-controls label{width:100%}.patch-step-controls .button{flex:1 1 140px}}
+@media(prefers-color-scheme:dark){.patch-step-review{border-color:#3b5068}.patch-step-controls label,.patch-step-result-label{color:#b6cce3}.patch-step-controls input{color:#e3f1ff;background:#19293b;border-color:#536783}}

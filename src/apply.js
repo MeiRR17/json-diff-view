@@ -184,9 +184,27 @@ export function applyJsonPatch(document, patch) {
   if (!Array.isArray(patch) || patch.length > MAX_OPERATIONS) {
     throw new RangeError('Expected a JSON Patch array with at most 5,000 operations.');
   }
+  return applyJsonPatchPrefix(document, patch, patch.length);
+}
+
+/**
+ * Materialize the document after precisely the first `count` instructions.
+ * This reuses the same detached execution and shared comparison budget as the
+ * full preview, without evaluating any later operations.
+ *
+ * `count = 0` returns a detached clone of the source.
+ * The original source and operation array are never mutated.
+ */
+export function applyJsonPatchPrefix(document, patch, count) {
+  if (!Array.isArray(patch) || patch.length > MAX_OPERATIONS) {
+    throw new RangeError('Expected a JSON Patch array with at most 5,000 operations.');
+  }
+  if (!Number.isSafeInteger(count) || count < 0 || count > patch.length) {
+    throw new RangeError('Step must be an integer between 0 and the number of patch operations.');
+  }
   let value = jsonClone(document);
   const comparisonBudget = { visited: 0 };
-  for (let i = 0; i < patch.length; i++) {
+  for (let i = 0; i < count; i++) {
     try {
       value = applyOne(value, patch[i], comparisonBudget);
     } catch (error) {

@@ -1,6 +1,6 @@
 import { diffJson, parseJson } from './diff.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
-import { applyJsonPatch } from './apply.js';
+import { applyJsonPatch, applyJsonPatchPrefix } from './apply.js';
 import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 
@@ -60,6 +60,12 @@ const inspectionNav = document.querySelector('#inspection-nav');
 const inspectionPrevious = document.querySelector('#inspection-previous');
 const inspectionNext = document.querySelector('#inspection-next');
 const inspectionPageSummary = document.querySelector('#inspection-page-summary');
+const stepCountInput = document.querySelector('#patch-step-count');
+const stepPreviewButton = document.querySelector('#patch-step-preview');
+const stepPreviousButton = document.querySelector('#patch-step-previous');
+const stepNextButton = document.querySelector('#patch-step-next');
+const stepResultEditor = document.querySelector('#patch-step-result');
+const stepStatus = document.querySelector('#patch-step-status');
 
 let latestReport = null;
 let currentPage = 0;
@@ -186,6 +192,73 @@ function renderReport(report) {
   renderChangeRows();
 }
 
+function invalidateStepPreview(message = 'Select a step and preview the detached document.') {
+  stepResultEditor.value = '';
+  stepStatus.textContent = message;
+  stepStatus.classList.remove('error');
+  stepPreviousButton.disabled = true;
+  stepNextButton.disabled = true;
+}
+
+function stepMessage(message, isError = false) {
+  stepStatus.textContent = message;
+  stepStatus.classList.toggle('error', isError);
+}
+
+function previewPatchStep(selectedCount) {
+  // No state is committed to either JSON editor. A failed prefix never
+  // displays a partially applied document.
+  invalidateStepPreview();
+  const source = patchBase.value;
+  const sourceLabel = patchSideLabel(source);
+  try {
+    const sourceText = patchEditor(source).value;
+    fitInput(sourceText, sourceLabel);
+    fitInput(patchSource.value, 'Patch');
+    const document = parseJson(sourceText, sourceLabel);
+    const patch = parseJson(patchSource.value, 'JSON Patch');
+    if (!Array.isArray(patch) || patch.length > 5000) {
+      throw new RangeError('Expected a JSON Patch array with at most 5,000 operations.');
+    }
+    const inputValue = selectedCount === undefined ? stepCountInput.value : String(selectedCount);
+    if (inputValue.trim() === '') {
+      throw new RangeError('Specify the number of patch operations to preview.');
+    }
+    const count = Number(inputValue);
+    if (!Number.isSafeInteger(count) || count < 0 || count > patch.length) {
+      throw new RangeError('Choose an integer step from 0 to ' + patch.length + '.');
+    }
+    const outcome = applyJsonPatchPrefix(document, patch, count);
+    const formatted = JSON.stringify(outcome, null, 2);
+    fitInput(formatted, 'Step result');
+    stepCountInput.max = String(patch.length);
+    stepCountInput.value = String(count);
+    stepResultEditor.value = formatted;
+    stepPreviousButton.disabled = count === 0;
+    stepNextButton.disabled = count >= patch.length;
+    const current = count === 0 ? 'Original document (no operations)' :
+      'Step ' + count + ': ' + patch[count - 1].op +
+      ' ' + (patch[count - 1].path || '(root)');
+    stepMessage(current + '. Applied ' + count + ' of ' + patch.length +
+      ' operations to a detached copy of ' + sourceLabel +
+      '. No JSON editor was modified.');
+  } catch (error) {
+    stepMessage('Cannot preview step: ' +
+      (error instanceof Error ? error.message : 'invalid patch'), true);
+  }
+}
+stepPreviewButton.addEventListener('click', () => previewPatchStep());
+stepPreviousButton.addEventListener('click', () => {
+  const count = Number(stepCountInput.value);
+  if (Number.isSafeInteger(count) && count > 0) previewPatchStep(count - 1);
+});
+stepNextButton.addEventListener('click', () => {
+  const count = Number(stepCountInput.value);
+  if (Number.isSafeInteger(count)) previewPatchStep(count + 1);
+});
+stepCountInput.addEventListener('input', () => invalidateStepPreview(
+  'Step selection changed. Preview the selected prefix.'));
+
 function invalidateInspection() {
   latestInspection = null;
   inspectionPage = 0;
@@ -292,6 +365,7 @@ function invalidatePatchResult() {
 }
 function resetReport() {
   invalidatePatchResult();
+  invalidateStepPreview();
   currentPage = 0;
   filterPath.value = '';
   filterType.value = 'all';
@@ -358,6 +432,7 @@ function refreshGeneratedPatch() {
 
 function compare() {
   invalidatePatchResult();
+  invalidateStepPreview();
   useGeneratedButton.disabled = true;
   try {
     fitInput(beforeEditor.value, 'Before');
@@ -476,6 +551,7 @@ document.querySelector('#clear').addEventListener('click', () => {
   afterEditor.value = '';
   patchSource.value = '';
   patchImportSequence++;
+  invalidateStepPreview();
   invalidateInspection();
   resetReport();
   setStatus('Editors cleared.');
@@ -773,6 +849,7 @@ function previewPatch() {
 }
 patchBase.addEventListener('change', () => {
   updateResultTarget();
+  invalidateStepPreview();
   invalidatePatchResult();
   patchMessage('Patch source changed to ' + patchSideLabel(patchBase.value) +
     '. Preview again before using the result.');
@@ -806,6 +883,7 @@ patchFile.addEventListener('change', async event => {
     if (request !== patchImportSequence) return;
     patchSource.value = contents;
     invalidateInspection();
+    invalidateStepPreview();
     invalidatePatchResult();
     patchMessage('Local patch file loaded. Select Preview applying patch to inspect the result.');
   } catch (error) {
@@ -819,6 +897,7 @@ document.querySelector('#preview-patch').addEventListener('click', previewPatch)
 patchSource.addEventListener('input', () => {
   patchImportSequence++;
   invalidateInspection();
+  invalidateStepPreview();
   invalidatePatchResult();
   patchMessage('Patch text changed. Preview again before using the result.');
 });
@@ -830,6 +909,7 @@ useGeneratedButton.addEventListener('click', () => {
   patchImportSequence++;
   patchSource.value = generatedText;
   invalidateInspection();
+  invalidateStepPreview();
   patchBase.value = patchDirection.value === 'reverse' ? 'after' : 'before';
   updateResultTarget();
   invalidatePatchResult();
