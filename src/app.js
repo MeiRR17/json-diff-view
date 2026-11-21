@@ -5,7 +5,7 @@ import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
-import { serializeFailureBundle } from './failure-bundle.js';
+import { serializeFailureBundle, parseFailureBundle } from './failure-bundle.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -133,6 +133,9 @@ const failureOpenStepButton = document.querySelector('#open-failure-step');
 const failureCopyBundleButton = document.querySelector('#copy-failure-bundle');
 const failureDownloadBundleButton = document.querySelector('#download-failure-bundle');
 const failureIsolateButton = document.querySelector('#isolate-failure');
+const importFailureButton = document.querySelector('#import-failure-bundle');
+const failureFile = document.querySelector('#failure-bundle-file');
+const failureImportMode = document.querySelector('#failure-import-mode');
 
 let latestFailure = null;
 let latestVerification = null;
@@ -1194,6 +1197,76 @@ downloadExpectedCsvButton.addEventListener('click', () => downloadExpectedReport
 // throwing (for example, a move that removes successfully but cannot add).
 // Replay only the completed prefix from the pristine JSON source; never
 // display or return the failed operation's partial mutation.
+
+async function loadFailureReproduction(file) {
+  if (!file) return;
+  // Newer imports, user edits, and explicit editor replacements win over any
+  // pending file read or confirmation dialog.
+  const request = ++bundleImportSequence;
+  invalidateAllEditorImports();
+  const beforeVersion = editorImportVersions.get(beforeEditor);
+  const afterVersion = editorImportVersions.get(afterEditor);
+  const patchVersion = ++patchImportSequence;
+  const mode = failureImportMode.value;
+  const initialPatchBase = patchBase.value;
+  const current = () => request === bundleImportSequence &&
+    beforeVersion === editorImportVersions.get(beforeEditor) &&
+    afterVersion === editorImportVersions.get(afterEditor) &&
+    patchVersion === patchImportSequence &&
+    initialPatchBase === patchBase.value &&
+    mode === failureImportMode.value;
+  if (file.size > MAX_REPORT_EXPORT_BYTES) {
+    patchMessage('Failure bundle exceeds the 8 MiB import limit.', true);
+    return;
+  }
+  try {
+    const contents = await file.text();
+    if (!current()) return;
+    const loaded = parseFailureBundle(contents, mode);
+    const editor = patchEditor(loaded.source);
+    const shouldConfirm =
+      (editor.value.trim() && editor.value !== loaded.documentText) ||
+      (patchSource.value.trim() && patchSource.value !== loaded.patchText);
+    if (shouldConfirm && !confirm(
+      'Import failure reproduction? This replaces the ' +
+      patchSideLabel(loaded.source) + ' source and patch editors. ' +
+      'The opposite editor will not change. No patch is executed.'
+    )) return;
+    if (!current()) return;
+
+    invalidateEditorImport(editor);
+    patchImportSequence++;
+    bundleImportSequence++;
+    editor.value = loaded.documentText;
+    patchSource.value = loaded.patchText;
+    patchBase.value = loaded.source;
+    updateResultTarget();
+    invalidateInspection();
+    resetReport();
+    patchMessage('Failure bundle loaded (' +
+      (loaded.mode === 'full' ? 'full operations through failure' : 'isolated failed operation') +
+      ', original failed step ' + loaded.failedIndex + '). ' +
+      'The reported reason is file metadata, not rechecked: ' +
+      loaded.reason.slice(0, 500) + '. Select Preview applying patch to execute explicitly.');
+  } catch (error) {
+    if (current()) {
+      patchMessage('Failure bundle import failed: ' +
+        (error instanceof Error ? error.message : 'invalid file'), true);
+    }
+  }
+}
+importFailureButton.addEventListener('click', () => failureFile.click());
+failureFile.addEventListener('change', event => {
+  const selected = event.target.files?.[0];
+  event.target.value = '';
+  if (selected) void loadFailureReproduction(selected);
+});
+failureImportMode.addEventListener('change', () => {
+  // A mode change during an asynchronous import invalidates its proposed
+  // editor replacement; the file must be selected again.
+  bundleImportSequence++;
+});
+
 function invalidatePatchFailure() {
   latestFailure = null;
   patchFailurePanel.hidden = true;

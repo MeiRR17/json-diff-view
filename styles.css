@@ -240,3 +240,11 @@ a{color:#155a98}
 .failure-repro-actions .button{font-size:.82rem;max-width:100%}
 .patch-failure-review .hint{overflow-wrap:anywhere}
 @media(max-width:700px){.failure-repro-actions .button{flex:1 1 165px}}
+
+/* Explicit failure bundle import mode; no automatic execution. */
+.failure-import-control{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.failure-import-control label{font-size:.82rem;font-weight:650;color:#3d5471}
+.failure-import-control select{font:inherit;font-size:.82rem;min-height:34px;max-width:100%;padding:6px 8px;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px}
+.failure-import-control select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+@media(max-width:700px){.failure-import-control{width:100%}.failure-import-control label{width:100%}.failure-import-control select,.failure-import-control .button{flex:1 1 160px}}
+@media(prefers-color-scheme:dark){.failure-import-control label{color:#b6cce3}.failure-import-control select{color:#e3f1ff;background:#19293b;border-color:#536783}}
