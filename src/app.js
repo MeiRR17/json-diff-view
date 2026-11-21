@@ -23,6 +23,8 @@ const copyButton = document.querySelector('#copy');
 const copyPatchButton = document.querySelector('#copy-patch');
 const downloadPatchButton = document.querySelector('#download-patch');
 const guardPatchCheckbox = document.querySelector('#guard-patch');
+const patchDirection = document.querySelector('#patch-direction');
+const patchBase = document.querySelector('#patch-base');
 const patchSource = document.querySelector('#patch-source');
 const patchResult = document.querySelector('#patch-result');
 const patchStatus = document.querySelector('#patch-status');
@@ -197,9 +199,12 @@ function refreshGeneratedPatch() {
   summary.append(indicator);
   try {
     const guarded = guardPatchCheckbox.checked;
+    const reverse = patchDirection.value === 'reverse';
+    // Generate reverse operations from the two actual documents, rather than
+    // trying to invert operations that may have lost their previous values.
     const operations = createJsonPatch(
-      latestComparison.before,
-      latestComparison.after,
+      reverse ? latestComparison.after : latestComparison.before,
+      reverse ? latestComparison.before : latestComparison.after,
       { guardChanges: guarded }
     );
     // Keep generated downloads compatible with the editor's 2 MiB import
@@ -210,6 +215,7 @@ function refreshGeneratedPatch() {
     downloadPatchButton.disabled = false;
     useGeneratedButton.disabled = false;
     indicator.textContent = (guarded ? 'Guarded' : 'Standard') +
+      ' ' + (reverse ? 'After → Before' : 'Before → After') +
       ' JSON Patch: ' + operations.length + ' operations';
     return '';
   } catch (error) {
@@ -314,13 +320,15 @@ nextPageButton.addEventListener('click', () => {
   renderChangeRows();
 });
 
-guardPatchCheckbox.addEventListener('change', () => {
+function regenerateFromOptions() {
   if (!latestComparison) return;
   const message = refreshGeneratedPatch();
   setStatus(message ? message.trim() :
     'Generated patch updated. The visual comparison and patch editor are unchanged.',
     Boolean(message));
-});
+}
+guardPatchCheckbox.addEventListener('change', regenerateFromOptions);
+patchDirection.addEventListener('change', regenerateFromOptions);
 
 document.querySelector('#compare').addEventListener('click', compare);
 document.querySelector('#swap').addEventListener('click', () => {
@@ -388,7 +396,8 @@ copyPatchButton.addEventListener('click', async () => {
   if (!latestPatch) return;
   try {
     await navigator.clipboard.writeText(serializeJsonPatch(latestPatch));
-    setStatus('RFC 6902 JSON Patch copied to clipboard.');
+    setStatus((patchDirection.value === 'reverse' ? 'After → Before' : 'Before → After') +
+      ' RFC 6902 JSON Patch copied to clipboard.');
   } catch {
     setStatus('Clipboard access failed. Use Download .jsonpatch instead.', true);
   }
@@ -402,7 +411,8 @@ downloadPatchButton.addEventListener('click', () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'changes.jsonpatch';
+  link.download = patchDirection.value === 'reverse' ?
+    'changes-after-to-before.jsonpatch' : 'changes-before-to-after.jsonpatch';
   document.body.append(link);
   link.click();
   link.remove();
@@ -414,25 +424,58 @@ function patchMessage(message, isError = false) {
   patchStatus.textContent = message;
   patchStatus.classList.toggle('error', isError);
 }
+function patchEditor(side) {
+  return side === 'after' ? afterEditor : beforeEditor;
+}
+function patchSideLabel(side) {
+  return side === 'after' ? 'After' : 'Before';
+}
+function updateResultTarget() {
+  sendResultButton.textContent = patchBase.value === 'after' ?
+    'Send result to Before' : 'Send result to After';
+}
+function previewIsCurrent() {
+  if (!lastApplied) return false;
+  return patchBase.value === lastApplied.source &&
+    patchEditor(lastApplied.source).value === lastApplied.sourceText &&
+    patchSource.value === lastApplied.patchText;
+}
 function previewPatch() {
   invalidatePatchResult();
+  const source = patchBase.value;
+  const sourceLabel = patchSideLabel(source);
+  const editor = patchEditor(source);
   try {
-    fitInput(beforeEditor.value, 'Before');
+    fitInput(editor.value, sourceLabel);
     fitInput(patchSource.value, 'Patch');
-    const documentBefore = parseJson(beforeEditor.value, 'Before');
+    const documentSource = parseJson(editor.value, sourceLabel);
     const operations = parseJson(patchSource.value, 'JSON Patch');
-    const transformed = applyJsonPatch(documentBefore, operations);
+    const transformed = applyJsonPatch(documentSource, operations);
     const json = JSON.stringify(transformed, null, 2);
     fitInput(json, 'Resulting document');
-    lastApplied = { beforeSource: beforeEditor.value, json };
+    lastApplied = {
+      source,
+      sourceText: editor.value,
+      patchText: patchSource.value,
+      json
+    };
     patchResult.value = json;
     sendResultButton.disabled = false;
     downloadResultButton.disabled = false;
-    patchMessage('Patch preview created on a copy of Before. No editor content changed.');
+    patchMessage('Patch preview created on a detached copy of ' + sourceLabel +
+      '. No editor content changed.');
   } catch (error) {
     patchMessage(error instanceof Error ? error.message : 'Unable to apply JSON Patch.', true);
   }
 }
+patchBase.addEventListener('change', () => {
+  updateResultTarget();
+  invalidatePatchResult();
+  patchMessage('Patch source changed to ' + patchSideLabel(patchBase.value) +
+    '. Preview again before using the result.');
+});
+updateResultTarget();
+
 importPatchButton.addEventListener('click', () => patchFile.click());
 patchFile.addEventListener('change', async event => {
   const file = event.target.files?.[0];
@@ -476,31 +519,40 @@ patchSource.addEventListener('input', () => {
 });
 useGeneratedButton.addEventListener('click', () => {
   if (!latestPatch) return;
+  const generatedText = serializeJsonPatch(latestPatch);
+  if (patchSource.value.trim() && patchSource.value !== generatedText &&
+      !confirm('Replace the current patch editor with the generated patch?')) return;
   patchImportSequence++;
-  patchSource.value = serializeJsonPatch(latestPatch);
+  patchSource.value = generatedText;
+  patchBase.value = patchDirection.value === 'reverse' ? 'after' : 'before';
+  updateResultTarget();
   invalidatePatchResult();
-  patchMessage('Generated patch copied into the patch editor. Select Preview applying patch.');
+  patchMessage('Generated patch copied into the editor. Source set to ' +
+    patchSideLabel(patchBase.value) + '. Select Preview applying patch.');
 });
 sendResultButton.addEventListener('click', () => {
   if (!lastApplied) return;
-  if (beforeEditor.value !== lastApplied.beforeSource) {
+  if (!previewIsCurrent()) {
     invalidatePatchResult();
-    patchMessage('Before changed. Recalculate the preview before using it.', true);
+    patchMessage('Patch or selected source changed. Recalculate the preview before using it.', true);
     return;
   }
-  if (afterEditor.value.trim() && afterEditor.value !== lastApplied.json &&
-      !confirm('Replace the current After editor with the patch result?')) return;
-  invalidateEditorImport(afterEditor);
-  afterEditor.value = lastApplied.json;
+  const target = lastApplied.source === 'after' ? 'before' : 'after';
+  const targetEditor = patchEditor(target);
+  const targetLabel = patchSideLabel(target);
+  if (targetEditor.value.trim() && targetEditor.value !== lastApplied.json &&
+      !confirm('Replace the current ' + targetLabel + ' editor with the patch result?')) return;
+  invalidateEditorImport(targetEditor);
+  targetEditor.value = lastApplied.json;
   resetReport();
   compare();
-  patchMessage('Patch result copied into After and both documents compared.');
+  patchMessage('Patch result copied into ' + targetLabel + ' and both documents compared.');
 });
 downloadResultButton.addEventListener('click', () => {
   if (!lastApplied) return;
-  if (beforeEditor.value !== lastApplied.beforeSource) {
+  if (!previewIsCurrent()) {
     invalidatePatchResult();
-    patchMessage('Before changed. Recalculate the preview before downloading.', true);
+    patchMessage('Patch or selected source changed. Recalculate the preview before downloading.', true);
     return;
   }
   const blob = new Blob([lastApplied.json + '\n'], { type: 'application/json;charset=utf-8' });

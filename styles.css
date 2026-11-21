@@ -88,3 +88,11 @@ a{color:#155a98}
 .patch-guard-option code{font:inherit;font-weight:800}
 .patch-guard-hint{margin:4px 0 15px!important}
 @media(prefers-color-scheme:dark){.patch-guard-option input{accent-color:#76c6ff}}
+
+/* Explicit patch direction and detached preview source selection. */
+.patch-direction-control,.patch-base-control{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin:0 0 14px}
+.patch-direction-control label,.patch-base-control label{font-size:.86rem;font-weight:650;color:#3d5471}
+.patch-direction-control select,.patch-base-control select{font:inherit;border:1px solid #bdcde0;background:#fff;color:#18324d;border-radius:8px;padding:9px 11px;min-height:39px;max-width:100%}
+.patch-direction-control select:focus-visible,.patch-base-control select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.patch-base-control{margin:14px 0}
+@media(prefers-color-scheme:dark){.patch-direction-control label,.patch-base-control label{color:#b6cce3}.patch-direction-control select,.patch-base-control select{color:#e3f1ff;background:#19293b;border-color:#536783}}
