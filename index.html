@@ -125,6 +125,40 @@
         </div>
       </div>
       <p class="hint" id="imported-failure-status" role="status" aria-live="polite">Import a failure bundle before verifying it.</p>
+      <section class="failure-verification-results" id="failure-verification-results" aria-labelledby="failure-verification-heading" hidden>
+        <div class="section-heading">
+          <h3 id="failure-verification-heading">Imported failure evidence</h3>
+          <div class="result-actions">
+            <button class="button subtle" id="copy-failure-verification" type="button" disabled>Copy verification JSON</button>
+            <button class="button subtle" id="download-failure-verification-json" type="button" disabled>↓ Verification JSON</button>
+            <button class="button subtle" id="download-failure-verification-csv" type="button" disabled>↓ Checkpoint diff CSV</button>
+          </div>
+        </div>
+        <p class="hint">Compares the last successful checkpoint independently replayed from the original source against the checkpoint stored in the imported bundle. JSON exports include all recorded verification outcomes; CSV exports include the complete recorded checkpoint differences, not the active filter or page.</p>
+        <p class="failure-verification-summary" id="failure-verification-summary" role="status" aria-live="polite"></p>
+        <div class="failure-verification-filters" role="group" aria-label="Filter checkpoint verification differences">
+          <label for="failure-verification-path">JSON path contains</label>
+          <input type="search" id="failure-verification-path" placeholder="e.g. $.items" autocomplete="off">
+          <label for="failure-verification-type">Difference type</label>
+          <select id="failure-verification-type">
+            <option value="all">All types</option>
+            <option value="added">Added in stored checkpoint</option>
+            <option value="removed">Missing in stored checkpoint</option>
+            <option value="changed">Different values</option>
+          </select>
+        </div>
+        <div class="results-scroll">
+          <table class="diff-table">
+            <thead><tr><th scope="col">JSON path</th><th scope="col">Recomputed</th><th scope="col">Stored in bundle</th></tr></thead>
+            <tbody id="failure-verification-rows"></tbody>
+          </table>
+        </div>
+        <nav class="results-nav" id="failure-verification-nav" aria-label="Checkpoint verification pages" hidden>
+          <button class="button subtle" type="button" id="failure-verification-previous">Previous page</button>
+          <span id="failure-verification-page-summary" aria-live="polite"></span>
+          <button class="button subtle" type="button" id="failure-verification-next">Next page</button>
+        </nav>
+      </section>
       <p class="hint">Paste a JSON Patch array, import a local .jsonpatch/.json file, or use the patch generated above. Choose the source editor for the preview. A reverse generated patch uses <strong>After</strong> as its source automatically. The preview is detached: neither document changes until you explicitly send the result to the opposite editor.</p>
       <div class="patch-base-control">
         <label for="patch-base">Apply patch to a copy of</label>
@@ -395,7 +429,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. After a user-triggered preview, the expected-result comparison shows whether the detached patch result structurally matches the opposite editor, including any mismatched paths. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview; the failing operation is identified and the last successful intermediate document can be inspected separately when within limits. A portable failure bundle or isolated one-operation reproduction can be created on demand and imported later, choosing the full prefix or the failed operation alone. Import never executes the patch automatically; a separate Verify imported failure action replays it on detached copies and checks the stored checkpoint and failure position. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. After a user-triggered preview, the expected-result comparison shows whether the detached patch result structurally matches the opposite editor, including any mismatched paths. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview; the failing operation is identified and the last successful intermediate document can be inspected separately when within limits. A portable failure bundle or isolated one-operation reproduction can be created on demand and imported later, choosing the full prefix or the failed operation alone. Import never executes the patch automatically; a separate Verify imported failure action replays it on detached copies, checks the stored checkpoint and failure position, and provides a filterable checkpoint mismatch report with local JSON/CSV exports. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>

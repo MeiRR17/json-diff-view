@@ -184,6 +184,7 @@ export function verifyFailureBundle(text) {
     checkpointMatches,
     checkpointDifferences: checkpointDiff.changes.length,
     checkpointTruncated: checkpointDiff.truncated,
+    checkpointReport: checkpointDiff,
     fullFailedAtExpected,
     fullFailedAt: full.index,
     isolatedFailed,

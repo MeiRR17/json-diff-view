@@ -138,8 +138,22 @@ const failureFile = document.querySelector('#failure-bundle-file');
 const failureImportMode = document.querySelector('#failure-import-mode');
 const verifyImportedFailureButton = document.querySelector('#verify-imported-failure');
 const importedFailureStatus = document.querySelector('#imported-failure-status');
+const failureVerificationPanel = document.querySelector('#failure-verification-results');
+const failureVerificationSummary = document.querySelector('#failure-verification-summary');
+const failureVerificationRows = document.querySelector('#failure-verification-rows');
+const failureVerificationPath = document.querySelector('#failure-verification-path');
+const failureVerificationType = document.querySelector('#failure-verification-type');
+const failureVerificationNav = document.querySelector('#failure-verification-nav');
+const failureVerificationPrevious = document.querySelector('#failure-verification-previous');
+const failureVerificationNext = document.querySelector('#failure-verification-next');
+const failureVerificationPageSummary = document.querySelector('#failure-verification-page-summary');
+const copyFailureVerificationButton = document.querySelector('#copy-failure-verification');
+const downloadFailureVerificationJsonButton = document.querySelector('#download-failure-verification-json');
+const downloadFailureVerificationCsvButton = document.querySelector('#download-failure-verification-csv');
 
 let latestImportedFailure = null;
+let latestImportedVerification = null;
+let failureVerificationPage = 0;
 let latestFailure = null;
 let latestVerification = null;
 let expectedPage = 0;
@@ -1201,7 +1215,21 @@ downloadExpectedCsvButton.addEventListener('click', () => downloadExpectedReport
 // Replay only the completed prefix from the pristine JSON source; never
 // display or return the failed operation's partial mutation.
 
+function invalidateFailureVerification() {
+  latestImportedVerification = null;
+  failureVerificationPage = 0;
+  failureVerificationPanel.hidden = true;
+  failureVerificationRows.replaceChildren();
+  failureVerificationSummary.textContent = '';
+  failureVerificationPath.value = '';
+  failureVerificationType.value = 'all';
+  failureVerificationNav.hidden = true;
+  copyFailureVerificationButton.disabled = true;
+  downloadFailureVerificationJsonButton.disabled = true;
+  downloadFailureVerificationCsvButton.disabled = true;
+}
 function invalidateImportedFailure(message = 'Import a failure bundle before verifying it.') {
+  invalidateFailureVerification();
   latestImportedFailure = null;
   verifyImportedFailureButton.disabled = true;
   importedFailureStatus.textContent = message;
@@ -1218,13 +1246,163 @@ function importedFailureCurrent() {
   }
   return loaded;
 }
+function currentFailureVerification() {
+  const loaded = importedFailureCurrent();
+  if (!loaded) return null;
+  if (!latestImportedVerification ||
+      latestImportedVerification.loaded !== loaded) {
+    invalidateFailureVerification();
+    return null;
+  }
+  return latestImportedVerification.result;
+}
+function failureVerificationSource(result) {
+  return 'Recomputed last-good → stored last-good, operation ' + result.expectedIndex;
+}
+function renderFailureVerification() {
+  if (!latestImportedVerification) return;
+  const result = latestImportedVerification.result;
+  const report = result.checkpointReport;
+  const needle = failureVerificationPath.value.trim().toLocaleLowerCase();
+  const type = failureVerificationType.value;
+  const matches = report.changes.filter(change =>
+    (type === 'all' || change.type === type) &&
+    (!needle || change.path.toLocaleLowerCase().includes(needle))
+  );
+  const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  failureVerificationPage = Math.min(failureVerificationPage, pages - 1);
+  const start = failureVerificationPage * PAGE_SIZE;
+  const visible = matches.slice(start, start + PAGE_SIZE);
+  failureVerificationPanel.hidden = false;
+  failureVerificationSummary.textContent =
+    (result.reproduced ? 'REPRODUCED' : 'INCONSISTENT BUNDLE') +
+    ' · Stored checkpoint ' + (result.checkpointMatches ? 'matches' : 'differs') +
+    ' · Full prefix ' + (result.fullFailedAtExpected ? 'fails at expected step' :
+      result.fullFailedAt === null ? 'does not fail' :
+      'fails at step ' + result.fullFailedAt) +
+    ' · Isolated operation ' + (result.isolatedFailed ? 'fails' : 'does not fail') +
+    ' · Recorded error text ' + (result.recordedReasonMatches ? 'matches' : 'differs') +
+    ' · ' + matches.length + '/' + report.changes.length + ' checkpoint differences visible.' +
+    (report.truncated ? ' Differences truncated at 5,000.' : '');
+  failureVerificationNav.hidden = matches.length <= PAGE_SIZE;
+  failureVerificationPrevious.disabled = failureVerificationPage === 0;
+  failureVerificationNext.disabled = failureVerificationPage >= pages - 1;
+  failureVerificationPageSummary.textContent =
+    'Page ' + (failureVerificationPage + 1) + ' of ' + pages;
+  const fragment = document.createDocumentFragment();
+  if (!visible.length) {
+    const row = document.createElement('tr');
+    const message = cell('td', report.changes.length ?
+      'No checkpoint differences match the filters.' :
+      'No structural differences between the recomputed and stored checkpoints.', 'empty');
+    message.colSpan = 3;
+    row.append(message);
+    fragment.append(row);
+  } else for (const change of visible) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+    const pathCell = document.createElement('td');
+    pathCell.append(cell('span', change.type, 'tag'));
+    pathCell.append(document.createElement('br'));
+    pathCell.append(cell('span', change.path, 'path'));
+    const fromCell = document.createElement('td');
+    fromCell.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const toCell = document.createElement('td');
+    toCell.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(pathCell, fromCell, toCell);
+    fragment.append(row);
+  }
+  failureVerificationRows.replaceChildren(fragment);
+}
+function serializeFailureVerification(result) {
+  return JSON.stringify({
+    format: 'json-diff-view-failure-verification',
+    version: 1,
+    expected_operation_index: result.expectedIndex,
+    reproduced: result.reproduced,
+    full_prefix_failed_at_expected_index: result.fullFailedAtExpected,
+    full_prefix_failed_at_index: result.fullFailedAt,
+    isolated_operation_failed: result.isolatedFailed,
+    recorded_reason_matches: result.recordedReasonMatches,
+    checkpoint_matches: result.checkpointMatches,
+    checkpoint: result.checkpointReport
+  }, null, 2) + '\n';
+}
+failureVerificationPath.addEventListener('input', () => {
+  if (!currentFailureVerification()) return;
+  failureVerificationPage = 0;
+  renderFailureVerification();
+});
+failureVerificationType.addEventListener('change', () => {
+  if (!currentFailureVerification()) return;
+  failureVerificationPage = 0;
+  renderFailureVerification();
+});
+failureVerificationPrevious.addEventListener('click', () => {
+  if (!currentFailureVerification() || failureVerificationPage === 0) return;
+  failureVerificationPage--;
+  renderFailureVerification();
+});
+failureVerificationNext.addEventListener('click', () => {
+  if (!currentFailureVerification()) return;
+  failureVerificationPage++;
+  renderFailureVerification();
+});
+copyFailureVerificationButton.addEventListener('click', async () => {
+  const result = currentFailureVerification();
+  if (!result) return;
+  try {
+    await navigator.clipboard.writeText(serializeFailureVerification(result));
+    importedFailureStatus.textContent =
+      'Complete failure verification report copied; UI filters do not affect exports.';
+  } catch {
+    importedFailureStatus.textContent =
+      'Could not copy the verification report. Check clipboard permissions.';
+    importedFailureStatus.classList.add('error');
+  }
+});
+function downloadFailureVerification(format) {
+  const result = currentFailureVerification();
+  if (!result) return;
+  try {
+    const csv = format === 'csv';
+    const content = csv ?
+      serializeReportCsv(result.checkpointReport, {
+        source: failureVerificationSource(result)
+      }) : serializeFailureVerification(result);
+    downloadReport(content,
+      'failure-verification-operation-' + result.expectedIndex + '.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    importedFailureStatus.textContent =
+      (csv ? 'Complete recorded checkpoint differences' :
+        'Full verification findings and checkpoint differences') +
+      ' downloaded as ' + format.toUpperCase() +
+      (result.checkpointReport.truncated ? ' (truncated).' : '.');
+    importedFailureStatus.classList.remove('error');
+  } catch (error) {
+    importedFailureStatus.textContent = 'Verification report download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error');
+    importedFailureStatus.classList.add('error');
+  }
+}
+downloadFailureVerificationJsonButton.addEventListener('click',
+  () => downloadFailureVerification('json'));
+downloadFailureVerificationCsvButton.addEventListener('click',
+  () => downloadFailureVerification('csv'));
+
 verifyImportedFailureButton.addEventListener('click', () => {
   const loaded = importedFailureCurrent();
   if (!loaded) return;
+  invalidateFailureVerification();
   // No imported instructions are executed during file parsing or import.
   // The deliberate click runs only detached engine operations.
   try {
     const result = verifyFailureBundle(loaded.text);
+    latestImportedVerification = { loaded, result };
+    copyFailureVerificationButton.disabled = false;
+    downloadFailureVerificationJsonButton.disabled = false;
+    downloadFailureVerificationCsvButton.disabled = false;
+    renderFailureVerification();
     if (result.reproduced) {
       importedFailureStatus.textContent = 'REPRODUCED: failed operation ' +
         result.expectedIndex + ' fails at the recorded position; the stored last-good ' +
@@ -1538,6 +1716,8 @@ function invalidatePatchResult() {
   downloadImpactCsvButton.disabled = true;
 }
 function resetReport() {
+  if (latestImportedFailure) invalidateImportedFailure(
+    'Editor contents changed. Import the failure bundle again before verifying.');
   invalidatePatchResult();
   invalidateStepPreview();
   invalidateRange();
@@ -2031,6 +2211,8 @@ function previewPatch() {
   }
 }
 patchBase.addEventListener('change', () => {
+  if (latestImportedFailure) invalidateImportedFailure(
+    'Patch source changed. Import the failure bundle again before verifying.');
   updateResultTarget();
   invalidateStepPreview();
   invalidateRange();
@@ -2081,6 +2263,8 @@ patchFile.addEventListener('change', async event => {
 document.querySelector('#preview-patch').addEventListener('click', previewPatch);
 patchSource.addEventListener('input', () => {
   patchImportSequence++;
+  if (latestImportedFailure) invalidateImportedFailure(
+    'Patch content changed. Import the failure bundle again before verifying.');
   invalidateInspection();
   invalidateStepPreview();
   invalidateRange();
