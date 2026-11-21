@@ -108,6 +108,8 @@
         <h2 id="patch-heading">Preview a JSON Patch</h2>
         <div class="patch-file-actions">
           <button class="button subtle" type="button" id="import-patch">↑ Import .jsonpatch</button>
+          <button class="button subtle" type="button" id="import-checkpoint-bundle">↑ Import checkpoint bundle</button>
+          <input id="checkpoint-bundle-file" type="file" accept=".json,application/json" hidden>
           <input id="patch-file" type="file" accept=".jsonpatch,.json,application/json" hidden>
           <button class="button subtle" type="button" id="use-generated" disabled>Use generated patch</button>
         </div>
@@ -248,6 +250,10 @@
               <button class="button subtle" type="button" id="download-range-end" disabled>↓ Download end JSON</button>
             </div>
           </div>
+          <div class="range-bundle-export">
+            <button class="button subtle" type="button" id="download-range-bundle" disabled>↓ Download checkpoint bundle</button>
+            <span class="hint">One local JSON file containing both checkpoints and the generated patch.</span>
+          </div>
           <p class="hint range-patch-warning">The generated patch transforms the document at the start checkpoint into the end checkpoint. It is <strong>not</strong> necessarily valid against the original document; the generated operations may differ from the selected portion of the input patch.</p>
           <p class="range-patch-status" id="range-patch-status" role="status" aria-live="polite"></p>
           <div class="range-filters" role="group" aria-label="Filter checkpoint differences">
@@ -318,7 +324,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>

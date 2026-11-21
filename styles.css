@@ -202,3 +202,9 @@ a{color:#155a98}
 .checkpoint-export-group .button{font-size:.81rem;padding:8px 10px}
 @media(max-width:720px){.range-checkpoint-exports{grid-template-columns:1fr}.checkpoint-export-group .button{flex:1 1 140px}}
 @media(prefers-color-scheme:dark){.checkpoint-export-group{background:#19293b;border-color:#3b5068}.checkpoint-export-title{color:#b6cce3}}
+
+/* Portable JSON checkpoint-bundle export for offline handoff. */
+.range-bundle-export{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:13px 0}
+.range-bundle-export .hint{margin:0;flex:1 1 210px}
+.range-bundle-export .button{max-width:100%}
+@media(max-width:700px){.range-bundle-export .button{flex:1 1 100%}}

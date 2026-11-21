@@ -4,6 +4,7 @@ import { applyJsonPatch, applyJsonPatchPrefix } from './apply.js';
 import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
+import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -103,6 +104,9 @@ const copyRangeStartButton = document.querySelector('#copy-range-start');
 const downloadRangeStartButton = document.querySelector('#download-range-start');
 const copyRangeEndButton = document.querySelector('#copy-range-end');
 const downloadRangeEndButton = document.querySelector('#download-range-end');
+const downloadRangeBundleButton = document.querySelector('#download-range-bundle');
+const importBundleButton = document.querySelector('#import-checkpoint-bundle');
+const bundleFile = document.querySelector('#checkpoint-bundle-file');
 
 let latestReport = null;
 let currentPage = 0;
@@ -112,6 +116,7 @@ let lastApplied = null;
 let latestImpact = null;
 let impactPage = 0;
 let patchImportSequence = 0;
+let bundleImportSequence = 0;
 let latestInspection = null;
 let inspectionPage = 0;
 let latestStep = null;
@@ -254,6 +259,7 @@ function invalidateRange(message = 'Choose two steps to compare their cumulative
   downloadRangeStartButton.disabled = true;
   copyRangeEndButton.disabled = true;
   downloadRangeEndButton.disabled = true;
+  downloadRangeBundleButton.disabled = true;
   rangePatchStatus.textContent = '';
   rangeMessage(message);
 }
@@ -338,6 +344,7 @@ downloadRangeEndButton.addEventListener('click', () => downloadRangeCheckpoint('
 function refreshRangePatch() {
   copyRangePatchButton.disabled = true;
   downloadRangePatchButton.disabled = true;
+  downloadRangeBundleButton.disabled = true;
   if (!latestRange) {
     rangePatchStatus.textContent = '';
     return;
@@ -354,6 +361,7 @@ function refreshRangePatch() {
     latestRange.patch = serialized;
     copyRangePatchButton.disabled = false;
     downloadRangePatchButton.disabled = false;
+    downloadRangeBundleButton.disabled = false;
     rangePatchStatus.textContent = (guardRangePatchCheckbox.checked ? 'Guarded' : 'Standard') +
       ' checkpoint patch available: ' + generated.length +
       ' operations. Apply it to the document at step ' + latestRange.start +
@@ -395,6 +403,82 @@ downloadRangePatchButton.addEventListener('click', () => {
       (error instanceof Error ? error.message : 'unknown error'), true);
   }
 });
+downloadRangeBundleButton.addEventListener('click', () => {
+  const snapshot = currentRange();
+  if (!snapshot || !snapshot.patch) return;
+  try {
+    const content = serializeCheckpointBundle(snapshot);
+    downloadReport(content,
+      'patch-' + snapshot.source + '-range-' +
+        snapshot.start + '-to-' + snapshot.end + '-bundle.json',
+      'application/json;charset=utf-8');
+    rangeMessage('Checkpoint bundle downloaded with start JSON, end JSON and patch.');
+  } catch (error) {
+    rangeMessage('Bundle download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
+async function loadCheckpointBundle(file) {
+  if (!file) return;
+  // Competing document/patch imports or edits must invalidate this async
+  // request; a newer bundle import supersedes an older one.
+  const bundleRequest = ++bundleImportSequence;
+  invalidateAllEditorImports();
+  const beforeRequest = editorImportVersions.get(beforeEditor);
+  const afterRequest = editorImportVersions.get(afterEditor);
+  const patchRequest = ++patchImportSequence;
+  const current = () => bundleRequest === bundleImportSequence &&
+    beforeRequest === editorImportVersions.get(beforeEditor) &&
+    afterRequest === editorImportVersions.get(afterEditor) &&
+    patchRequest === patchImportSequence;
+  if (file.size > MAX_REPORT_EXPORT_BYTES) {
+    patchMessage('Checkpoint bundle exceeds the 8 MiB import limit.', true);
+    return;
+  }
+  try {
+    const contents = await file.text();
+    if (!current()) return;
+    const loaded = parseCheckpointBundle(contents);
+    const overwrite = [
+      [beforeEditor.value, loaded.beforeText],
+      [afterEditor.value, loaded.afterText],
+      [patchSource.value, loaded.patchText]
+    ].some(([existing, incoming]) => existing.trim() && existing !== incoming);
+    if (overwrite && !confirm(
+      'Replace the Before, After and patch editors with the checkpoint bundle? ' +
+      'No patch will be applied automatically.'
+    )) return;
+    if (!current()) return;
+    // Commit all three editor assignments as one approved user action.
+    invalidateAllEditorImports();
+    patchImportSequence++;
+    beforeEditor.value = loaded.beforeText;
+    afterEditor.value = loaded.afterText;
+    patchSource.value = loaded.patchText;
+    patchBase.value = 'before';
+    updateResultTarget();
+    invalidateInspection();
+    resetReport();
+    compare();
+    patchMessage('Checkpoint bundle loaded (original ' +
+      patchSideLabel(loaded.source) + ', steps ' + loaded.start + '–' +
+      loaded.end + '). Before is the patch base; After is the expected result. ' +
+      'Choose Preview applying patch to run it explicitly.');
+  } catch (error) {
+    if (current()) {
+      patchMessage('Checkpoint bundle import failed: ' +
+        (error instanceof Error ? error.message : 'invalid bundle'), true);
+    }
+  }
+}
+importBundleButton.addEventListener('click', () => bundleFile.click());
+bundleFile.addEventListener('change', event => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (file) void loadCheckpointBundle(file);
+});
+
 function renderRange() {
   if (!latestRange) return;
   const { report, start, end } = latestRange;
