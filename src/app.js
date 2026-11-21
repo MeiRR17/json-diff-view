@@ -7,6 +7,7 @@ import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
 import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
+import { compareVerificationArchives } from './evidence-compare.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -155,7 +156,26 @@ const downloadVerificationEvidenceButton = document.querySelector('#download-ver
 const importVerificationEvidenceButton = document.querySelector('#import-verification-evidence');
 const verificationEvidenceFile = document.querySelector('#verification-evidence-file');
 const verificationEvidenceContext = document.querySelector('#verification-evidence-context');
+const evidenceBaselineFile = document.querySelector('#evidence-baseline-file');
+const evidenceCandidateFile = document.querySelector('#evidence-candidate-file');
+const compareEvidenceButton = document.querySelector('#compare-evidence-archives');
+const evidenceCompareStatus = document.querySelector('#evidence-compare-status');
+const evidenceComparePanel = document.querySelector('#evidence-comparison-results');
+const evidenceCompareSummary = document.querySelector('#evidence-comparison-summary');
+const evidenceCompareRows = document.querySelector('#evidence-comparison-rows');
+const evidenceComparePath = document.querySelector('#evidence-comparison-path');
+const evidenceCompareType = document.querySelector('#evidence-comparison-type');
+const evidenceCompareNav = document.querySelector('#evidence-comparison-nav');
+const evidenceComparePrevious = document.querySelector('#evidence-comparison-previous');
+const evidenceCompareNext = document.querySelector('#evidence-comparison-next');
+const evidenceComparePageSummary = document.querySelector('#evidence-comparison-page-summary');
+const copyEvidenceCompareButton = document.querySelector('#copy-evidence-comparison');
+const downloadEvidenceCompareJsonButton = document.querySelector('#download-evidence-comparison-json');
+const downloadEvidenceCompareCsvButton = document.querySelector('#download-evidence-comparison-csv');
 
+let evidenceCompareGeneration = 0;
+let latestEvidenceComparison = null;
+let evidenceComparisonPage = 0;
 let evidenceImportSequence = 0;
 let latestImportedFailure = null;
 let latestImportedVerification = null;
@@ -1215,6 +1235,202 @@ function downloadExpectedReport(format) {
 }
 downloadExpectedJsonButton.addEventListener('click', () => downloadExpectedReport('json'));
 downloadExpectedCsvButton.addEventListener('click', () => downloadExpectedReport('csv'));
+
+// Saved-evidence comparison does not touch the document and patch editors.
+// It compares two untrusted archived claims, not a newly executed replay.
+function evidenceCompareMessage(message, isError = false) {
+  evidenceCompareStatus.textContent = message;
+  evidenceCompareStatus.classList.toggle('error', isError);
+}
+function invalidateEvidenceComparison() {
+  evidenceCompareGeneration++;
+  latestEvidenceComparison = null;
+  evidenceComparisonPage = 0;
+  evidenceComparePanel.hidden = true;
+  evidenceCompareRows.replaceChildren();
+  evidenceCompareSummary.textContent = '';
+  evidenceCompareNav.hidden = true;
+  evidenceComparePath.value = '';
+  evidenceCompareType.value = 'all';
+  copyEvidenceCompareButton.disabled = true;
+  downloadEvidenceCompareJsonButton.disabled = true;
+  downloadEvidenceCompareCsvButton.disabled = true;
+}
+function renderEvidenceComparison() {
+  if (!latestEvidenceComparison) return;
+  const { report, sameCase, baselineReproduced, candidateReproduced } =
+    latestEvidenceComparison;
+  const needle = evidenceComparePath.value.trim().toLocaleLowerCase();
+  const type = evidenceCompareType.value;
+  const matching = report.changes.filter(change =>
+    (type === 'all' || change.type === type) &&
+    (!needle || change.path.toLocaleLowerCase().includes(needle))
+  );
+  const pages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
+  evidenceComparisonPage = Math.min(evidenceComparisonPage, pages - 1);
+  const offset = evidenceComparisonPage * PAGE_SIZE;
+  const shown = matching.slice(offset, offset + PAGE_SIZE);
+  evidenceComparePanel.hidden = false;
+  evidenceCompareSummary.textContent =
+    'ARCHIVED EVIDENCE ONLY — NOT REVERIFIED. ' +
+    (sameCase ? 'Same recorded failure identity.' :
+      'Different failure identities: compare with caution.') +
+    ' Baseline ' + (baselineReproduced ? 'REPRODUCED' : 'INCONSISTENT') +
+    ' → candidate ' + (candidateReproduced ? 'REPRODUCED' : 'INCONSISTENT') +
+    '. ' + report.changes.length + ' recorded differences; ' +
+    matching.length + ' match filters.' +
+    (report.truncated ? ' Comparison truncated at 5,000 differences.' : '');
+  evidenceCompareNav.hidden = matching.length <= PAGE_SIZE;
+  evidenceComparePrevious.disabled = evidenceComparisonPage === 0;
+  evidenceCompareNext.disabled = evidenceComparisonPage >= pages - 1;
+  evidenceComparePageSummary.textContent =
+    'Page ' + (evidenceComparisonPage + 1) + ' of ' + pages;
+  const fragment = document.createDocumentFragment();
+  if (!shown.length) {
+    const row = document.createElement('tr');
+    const empty = cell('td', report.changes.length ?
+      'No evidence changes match the active filters.' :
+      'The two saved evidence archives contain identical recorded findings.', 'empty');
+    empty.colSpan = 3;
+    row.append(empty);
+    fragment.append(row);
+  } else for (const change of shown) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+    const path = document.createElement('td');
+    path.append(cell('span', change.type, 'tag'));
+    path.append(document.createElement('br'));
+    path.append(cell('span', change.path, 'path'));
+    const before = document.createElement('td');
+    before.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const after = document.createElement('td');
+    after.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(path, before, after);
+    fragment.append(row);
+  }
+  evidenceCompareRows.replaceChildren(fragment);
+}
+function currentEvidenceComparison() {
+  if (!latestEvidenceComparison) return null;
+  return latestEvidenceComparison;
+}
+function evidenceComparisonJson(snapshot) {
+  return JSON.stringify({
+    format: 'json-diff-view-evidence-comparison',
+    version: 1,
+    archived_not_reverified: true,
+    same_failure_identity: snapshot.sameCase,
+    baseline: {
+      metadata: snapshot.baseline,
+      reproduced_claim: snapshot.baselineReproduced
+    },
+    candidate: {
+      metadata: snapshot.candidate,
+      reproduced_claim: snapshot.candidateReproduced
+    },
+    report: snapshot.report
+  }, null, 2) + '\n';
+}
+for (const field of [evidenceBaselineFile, evidenceCandidateFile]) {
+  field.addEventListener('change', () => {
+    invalidateEvidenceComparison();
+    evidenceCompareMessage('Saved evidence selection changed. Compare the two files again.');
+  });
+}
+compareEvidenceButton.addEventListener('click', async () => {
+  invalidateEvidenceComparison();
+  const request = evidenceCompareGeneration;
+  const baseline = evidenceBaselineFile.files?.[0];
+  const candidate = evidenceCandidateFile.files?.[0];
+  if (!baseline || !candidate) {
+    evidenceCompareMessage('Choose both a baseline and a candidate evidence JSON file.', true);
+    return;
+  }
+  if (baseline.size > MAX_REPORT_EXPORT_BYTES ||
+      candidate.size > MAX_REPORT_EXPORT_BYTES) {
+    evidenceCompareMessage('Each saved evidence archive must be at most 8 MiB.', true);
+    return;
+  }
+  evidenceCompareMessage('Reading both saved evidence files locally…');
+  try {
+    const [baselineText, candidateText] = await Promise.all([
+      baseline.text(), candidate.text()
+    ]);
+    if (request !== evidenceCompareGeneration) return;
+    const result = compareVerificationArchives(baselineText, candidateText);
+    if (request !== evidenceCompareGeneration) return;
+    latestEvidenceComparison = result;
+    evidenceComparisonPage = 0;
+    renderEvidenceComparison();
+    copyEvidenceCompareButton.disabled = false;
+    downloadEvidenceCompareJsonButton.disabled = false;
+    downloadEvidenceCompareCsvButton.disabled = false;
+    evidenceCompareMessage('Compared saved evidence files. No patch was replayed, ' +
+      'and no editors were changed.' +
+      (result.sameCase ? '' :
+        ' The files concern different recorded failure identities.'));
+  } catch (error) {
+    if (request === evidenceCompareGeneration) {
+      evidenceCompareMessage('Could not compare evidence: ' +
+        (error instanceof Error ? error.message : 'invalid archive'), true);
+    }
+  }
+});
+evidenceComparePath.addEventListener('input', () => {
+  evidenceComparisonPage = 0;
+  renderEvidenceComparison();
+});
+evidenceCompareType.addEventListener('change', () => {
+  evidenceComparisonPage = 0;
+  renderEvidenceComparison();
+});
+evidenceComparePrevious.addEventListener('click', () => {
+  if (!currentEvidenceComparison() || evidenceComparisonPage === 0) return;
+  evidenceComparisonPage--;
+  renderEvidenceComparison();
+});
+evidenceCompareNext.addEventListener('click', () => {
+  if (!currentEvidenceComparison()) return;
+  evidenceComparisonPage++;
+  renderEvidenceComparison();
+});
+copyEvidenceCompareButton.addEventListener('click', async () => {
+  const result = currentEvidenceComparison();
+  if (!result) return;
+  try {
+    const text = evidenceComparisonJson(result);
+    if (new TextEncoder().encode(text).byteLength > MAX_REPORT_EXPORT_BYTES) {
+      throw new RangeError('Evidence comparison exceeds 8 MiB.');
+    }
+    await navigator.clipboard.writeText(text);
+    evidenceCompareMessage('Complete saved-evidence comparison copied, without UI filters.');
+  } catch (error) {
+    evidenceCompareMessage('Could not copy comparison: ' +
+      (error instanceof Error ? error.message : 'clipboard unavailable'), true);
+  }
+});
+function exportEvidenceComparison(format) {
+  const result = currentEvidenceComparison();
+  if (!result) return;
+  try {
+    const csv = format === 'csv';
+    const text = csv ? serializeReportCsv(result.report, {
+      source: 'Archived evidence baseline → candidate (not reverified)'
+    }) : evidenceComparisonJson(result);
+    downloadReport(text, 'saved-evidence-comparison.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    evidenceCompareMessage('Complete saved-evidence comparison downloaded as ' +
+      format.toUpperCase() +
+      (result.report.truncated ? ' (truncated).' : '.'));
+  } catch (error) {
+    evidenceCompareMessage('Comparison download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+downloadEvidenceCompareJsonButton.addEventListener('click',
+  () => exportEvidenceComparison('json'));
+downloadEvidenceCompareCsvButton.addEventListener('click',
+  () => exportEvidenceComparison('csv'));
 
 // Failed operations may modify the internal detached working value before
 // throwing (for example, a move that removes successfully but cannot add).

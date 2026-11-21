@@ -275,3 +275,22 @@ a{color:#155a98}
 #download-verification-evidence{white-space:nowrap}
 .failure-verification-results .result-actions{flex-wrap:wrap}
 @media(max-width:700px){#download-verification-evidence{flex:1 1 165px}}
+
+/* Offline comparison of two saved verification archives. */
+.evidence-comparison-workspace{margin:20px 0;padding:18px 0;border-top:1px solid #d8e1ed;border-bottom:1px solid #d8e1ed}
+.evidence-comparison-workspace h3{font-size:1rem;margin:0}
+.evidence-comparison-workspace h4{font-size:.95rem;margin:0}
+.evidence-compare-inputs{display:grid;grid-template-columns:minmax(130px,1fr) minmax(0,2fr);gap:9px 14px;align-items:center;margin:14px 0}
+.evidence-compare-inputs label,.evidence-compare-filters label{font-size:.84rem;font-weight:650;color:#3d5471}
+.evidence-compare-inputs input[type=file]{font:inherit;font-size:.83rem;min-width:0;max-width:100%;color:inherit}
+.evidence-compare-inputs .button{grid-column:1/-1;justify-self:start}
+.evidence-comparison-summary{font-size:.87rem;font-weight:650;color:#3d5471;margin:12px 0}
+.evidence-comparison-workspace .section-heading{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.evidence-compare-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:13px 0}
+.evidence-compare-filters input,.evidence-compare-filters select{font:inherit;min-height:39px;max-width:100%;padding:9px 11px;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px}
+.evidence-compare-filters input{flex:2 1 170px}
+.evidence-compare-filters select{flex:0 1 160px}
+.evidence-compare-filters label{white-space:nowrap}
+.evidence-compare-filters input:focus-visible,.evidence-compare-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+@media(max-width:700px){.evidence-compare-inputs{grid-template-columns:1fr}.evidence-compare-inputs .button{grid-column:auto;width:100%}.evidence-comparison-workspace .result-actions{width:100%;justify-content:flex-start}.evidence-compare-filters label{width:100%}.evidence-compare-filters select{flex:1 1 160px}}
+@media(prefers-color-scheme:dark){.evidence-comparison-workspace{border-color:#3b5068}.evidence-compare-inputs label,.evidence-compare-filters label,.evidence-comparison-summary{color:#b6cce3}.evidence-compare-filters input,.evidence-compare-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
