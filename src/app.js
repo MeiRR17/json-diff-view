@@ -1,6 +1,6 @@
 import { diffJson, parseJson } from './diff.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
-import { applyJsonPatch, applyJsonPatchPrefix } from './apply.js';
+import { applyJsonPatch, applyJsonPatchPrefix, JsonPatchOperationError } from './apply.js';
 import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
@@ -121,7 +121,16 @@ const expectedPageSummary = document.querySelector('#expected-page-summary');
 const copyExpectedButton = document.querySelector('#copy-expected');
 const downloadExpectedJsonButton = document.querySelector('#download-expected-json');
 const downloadExpectedCsvButton = document.querySelector('#download-expected-csv');
+const patchFailurePanel = document.querySelector('#patch-failure');
+const patchFailureSummary = document.querySelector('#patch-failure-summary');
+const patchFailureOperation = document.querySelector('#patch-failure-operation');
+const patchFailureCheckpoint = document.querySelector('#patch-failure-checkpoint');
+const patchFailureNote = document.querySelector('#patch-failure-note');
+const failureCopyButton = document.querySelector('#copy-failure-checkpoint');
+const failureDownloadButton = document.querySelector('#download-failure-checkpoint');
+const failureOpenStepButton = document.querySelector('#open-failure-step');
 
+let latestFailure = null;
 let latestVerification = null;
 let expectedPage = 0;
 let latestReport = null;
@@ -1177,7 +1186,115 @@ function downloadExpectedReport(format) {
 downloadExpectedJsonButton.addEventListener('click', () => downloadExpectedReport('json'));
 downloadExpectedCsvButton.addEventListener('click', () => downloadExpectedReport('csv'));
 
+// Failed operations may modify the internal detached working value before
+// throwing (for example, a move that removes successfully but cannot add).
+// Replay only the completed prefix from the pristine JSON source; never
+// display or return the failed operation's partial mutation.
+function invalidatePatchFailure() {
+  latestFailure = null;
+  patchFailurePanel.hidden = true;
+  patchFailureSummary.textContent = '';
+  patchFailureOperation.textContent = '';
+  patchFailureCheckpoint.value = '';
+  patchFailureNote.textContent = '';
+  failureCopyButton.disabled = true;
+  failureDownloadButton.disabled = true;
+  failureOpenStepButton.disabled = true;
+}
+function currentPatchFailure() {
+  if (!latestFailure || patchBase.value !== latestFailure.source ||
+      patchEditor(latestFailure.source).value !== latestFailure.sourceText ||
+      patchSource.value !== latestFailure.patchText) {
+    invalidatePatchFailure();
+    patchMessage('The failed preview is stale. Preview the patch again.', true);
+    return null;
+  }
+  return latestFailure;
+}
+function showPatchFailure(error, documentSource, operations, source, sourceText) {
+  const index = error.operationIndex;
+  if (!Array.isArray(operations) || index < 1 || index > operations.length) return;
+  const operation = operations[index - 1];
+  const obj = operation && typeof operation === 'object' && !Array.isArray(operation);
+  const opName = obj && typeof operation.op === 'string' ? operation.op : '(invalid)';
+  const path = obj && typeof operation.path === 'string' ? operation.path : '(missing)';
+  const from = obj && typeof operation.from === 'string' ? operation.from : null;
+  const safeSnippet = value => value.length > 500 ?
+    value.slice(0, 500) + '… (shortened)' : value;
+
+  const completed = index - 1;
+  latestFailure = {
+    source, sourceText, patchText: patchSource.value,
+    operationIndex: index, completed, json: null
+  };
+  patchFailurePanel.hidden = false;
+  patchFailureSummary.textContent = 'Operation ' + index + ' (' + opName +
+    ') failed after ' + completed + ' completed operation' +
+    (completed === 1 ? '' : 's') + '. The patch was not applied to any editor.';
+  patchFailureOperation.textContent = 'Path: ' + safeSnippet(path) +
+    (from === null ? '' : ' · From: ' + safeSnippet(from)) +
+    ' · Reason: ' + error.message;
+
+  try {
+    const stable = applyJsonPatchPrefix(documentSource, operations, completed);
+    // Match the regular read-only preview size limit. If pretty-printing
+    // exceeds it, compact JSON may still fit.
+    let json = JSON.stringify(stable, null, 2);
+    try {
+      fitInput(json, 'Last successful checkpoint');
+    } catch {
+      json = JSON.stringify(stable);
+      fitInput(json, 'Last successful checkpoint');
+    }
+    latestFailure.json = json;
+    patchFailureCheckpoint.value = json;
+    patchFailureNote.textContent =
+      'This checkpoint is the document after step ' + completed +
+      ', reconstructed from the original source. It excludes the failing operation.';
+    failureCopyButton.disabled = false;
+    failureDownloadButton.disabled = false;
+    failureOpenStepButton.disabled = false;
+  } catch (snapshotError) {
+    patchFailureNote.textContent = 'The failure was located, but the last successful ' +
+      'checkpoint cannot be shown: ' +
+      (snapshotError instanceof Error ? snapshotError.message : 'snapshot unavailable') +
+      '. No partial state from the failed operation is exposed.';
+  }
+}
+failureCopyButton.addEventListener('click', async () => {
+  const failure = currentPatchFailure();
+  if (!failure || failure.json === null) return;
+  try {
+    await navigator.clipboard.writeText(failure.json + '\n');
+    patchMessage('Last successful checkpoint copied (step ' + failure.completed + ').');
+  } catch {
+    patchMessage('Cannot copy the checkpoint. Check clipboard permissions.', true);
+  }
+});
+failureDownloadButton.addEventListener('click', () => {
+  const failure = currentPatchFailure();
+  if (!failure || failure.json === null) return;
+  try {
+    downloadReport(failure.json + '\n',
+      'patch-' + failure.source + '-last-good-step-' + failure.completed + '.json',
+      'application/json;charset=utf-8');
+    patchMessage('Last successful checkpoint downloaded. The failed operation was not included.');
+  } catch (error) {
+    patchMessage('Checkpoint download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+failureOpenStepButton.addEventListener('click', () => {
+  const failure = currentPatchFailure();
+  if (!failure || failure.json === null) return;
+  previewPatchStep(failure.completed);
+  document.querySelector('#patch-step-heading').scrollIntoView({
+    behavior: 'smooth', block: 'start'
+  });
+});
+
 function invalidatePatchResult() {
+  invalidatePatchFailure();
   invalidateExpectedReview();
   lastApplied = null;
   patchResult.value = '';
@@ -1640,11 +1757,13 @@ function previewPatch() {
   const source = patchBase.value;
   const sourceLabel = patchSideLabel(source);
   const editor = patchEditor(source);
+  let documentSource = null;
+  let operations = null;
   try {
     fitInput(editor.value, sourceLabel);
     fitInput(patchSource.value, 'Patch');
-    const documentSource = parseJson(editor.value, sourceLabel);
-    const operations = parseJson(patchSource.value, 'JSON Patch');
+    documentSource = parseJson(editor.value, sourceLabel);
+    operations = parseJson(patchSource.value, 'JSON Patch');
     const transformed = applyJsonPatch(documentSource, operations);
     const json = JSON.stringify(transformed, null, 2);
     fitInput(json, 'Resulting document');
@@ -1680,6 +1799,9 @@ function previewPatch() {
     patchMessage('Patch preview created on a detached copy of ' + sourceLabel +
       '. No editor content changed.' + impactWarning);
   } catch (error) {
+    if (error instanceof JsonPatchOperationError && operations !== null) {
+      showPatchFailure(error, documentSource, operations, source, editor.value);
+    }
     patchMessage(error instanceof Error ? error.message : 'Unable to apply JSON Patch.', true);
   }
 }

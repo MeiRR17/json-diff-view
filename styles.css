@@ -224,3 +224,13 @@ a{color:#155a98}
 .expected-filters input:focus-visible,.expected-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.expected-filters label{width:100%}.expected-filters select{flex:1 1 170px}.patch-expected-review .result-actions{width:100%;justify-content:flex-start}}
 @media(prefers-color-scheme:dark){.patch-expected-review{border-color:#3b5068}.expected-summary,.expected-filters label{color:#b6cce3}.expected-filters input,.expected-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Explicit failed-operation diagnosis with reconstructed, read-only prefix. */
+.patch-failure-review{margin:18px 0;padding:16px 0;border-top:1px solid #d8e1ed}
+.patch-failure-review h3{font-size:1rem;margin:0 0 8px}
+.patch-failure-summary{font-weight:700;font-size:.9rem;color:#923d22;margin:10px 0}
+.patch-failure-operation{overflow-wrap:anywhere;white-space:pre-wrap}
+.patch-failure-label{display:block;font-weight:650;font-size:.84rem;color:#3d5471;margin:12px 0 8px}
+.patch-failure-review textarea{display:block;width:100%;min-height:150px;box-sizing:border-box}
+.patch-failure-review .actions{margin-top:11px;flex-wrap:wrap}
+@media(prefers-color-scheme:dark){.patch-failure-review{border-color:#3b5068}.patch-failure-summary{color:#ffb6a0}.patch-failure-label{color:#b6cce3}}

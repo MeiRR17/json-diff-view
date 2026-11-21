@@ -180,6 +180,19 @@ function applyOne(root, operation, comparisonBudget) {
  * @param {unknown[]} patch RFC 6902 operation array.
  * @returns {unknown} A new JSON value, with no mutation to the input.
  */
+/**
+ * An operation-level failure carrying a structured 1-based position.
+ * The original message is retained for callers that display errors.
+ * No partially mutated document is attached to the error.
+ */
+export class JsonPatchOperationError extends Error {
+  constructor(operationIndex, reason) {
+    super('JSON Patch operation ' + operationIndex + ': ' + reason);
+    this.name = 'JsonPatchOperationError';
+    this.operationIndex = operationIndex;
+  }
+}
+
 export function applyJsonPatch(document, patch) {
   if (!Array.isArray(patch) || patch.length > MAX_OPERATIONS) {
     throw new RangeError('Expected a JSON Patch array with at most 5,000 operations.');
@@ -208,8 +221,8 @@ export function applyJsonPatchPrefix(document, patch, count) {
     try {
       value = applyOne(value, patch[i], comparisonBudget);
     } catch (error) {
-      throw new Error('JSON Patch operation ' + (i + 1) + ': ' +
-        (error instanceof Error ? error.message : 'failed.'));
+      throw new JsonPatchOperationError(i + 1,
+        error instanceof Error ? error.message : 'failed.');
     }
   }
   return value;
