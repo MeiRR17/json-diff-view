@@ -111,3 +111,26 @@ a{color:#155a98}
 .impact-filters input:focus-visible,.impact-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.impact-filters label{width:100%}.impact-filters select{flex:1 1 150px}}
 @media(prefers-color-scheme:dark){.patch-impact{border-color:#3b5068}.impact-summary,.impact-filters label{color:#b6cce3}.impact-filters input,.impact-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Read-only JSON Patch instruction ledger, separate from detached application. */
+.patch-inspection-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:17px 0}
+.patch-inspection-actions .hint{margin:0;flex:1 1 260px}
+.patch-inspection{margin:17px 0;padding:16px 0;border-top:1px solid #d8e1ed;border-bottom:1px solid #d8e1ed}
+.patch-inspection h3{margin:0;font-size:1rem}
+.inspection-summary{font-size:.86rem;font-weight:650;color:#3d5471;overflow-wrap:anywhere}
+.inspection-filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0 14px}
+.inspection-filters label{font-size:.82rem;font-weight:650;color:#3d5471}
+.inspection-filters select,.inspection-filters input{font:inherit;background:#fff;color:#18324d;border:1px solid #bdcde0;border-radius:8px;padding:8px 10px;max-width:100%}
+.inspection-filters input{flex:1 1 180px}
+.inspection-filters select:focus-visible,.inspection-filters input:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.inspection-table{min-width:880px}
+.inspection-table th:first-child{width:6%}
+.inspection-table th:nth-child(2){width:10%}
+.inspection-table th:nth-child(3){width:20%}
+.inspection-table th:nth-child(4){width:17%}
+.inspection-table th:nth-child(5){width:25%}
+.inspection-table th:nth-child(6){width:22%}
+.inspection-table td{font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
+.inspection-table tr.inspection-warning{background:#fff4e5}
+@media(max-width:680px){.inspection-filters label{width:100%}}
+@media(prefers-color-scheme:dark){.patch-inspection{border-color:#3b5068}.inspection-summary,.inspection-filters label{color:#b6cce3}.inspection-filters select,.inspection-filters input{color:#e3f1ff;background:#19293b;border-color:#536783}.inspection-table tr.inspection-warning{background:#46391f}}

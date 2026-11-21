@@ -2,6 +2,7 @@ import { diffJson, parseJson } from './diff.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
 import { applyJsonPatch } from './apply.js';
 import { serializeReportJson, serializeReportCsv } from './export.js';
+import { inspectPatchOperations } from './inspect.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -49,6 +50,16 @@ const impactPageSummary = document.querySelector('#impact-page-summary');
 const copyImpactButton = document.querySelector('#copy-impact');
 const downloadImpactJsonButton = document.querySelector('#download-impact-json');
 const downloadImpactCsvButton = document.querySelector('#download-impact-csv');
+const inspectPatchButton = document.querySelector('#inspect-patch');
+const inspectionPanel = document.querySelector('#patch-inspection');
+const inspectionSummary = document.querySelector('#inspection-summary');
+const inspectionRows = document.querySelector('#inspection-rows');
+const inspectionType = document.querySelector('#inspection-type');
+const inspectionPath = document.querySelector('#inspection-path');
+const inspectionNav = document.querySelector('#inspection-nav');
+const inspectionPrevious = document.querySelector('#inspection-previous');
+const inspectionNext = document.querySelector('#inspection-next');
+const inspectionPageSummary = document.querySelector('#inspection-page-summary');
 
 let latestReport = null;
 let currentPage = 0;
@@ -58,6 +69,8 @@ let lastApplied = null;
 let latestImpact = null;
 let impactPage = 0;
 let patchImportSequence = 0;
+let latestInspection = null;
+let inspectionPage = 0;
 const editorImportVersions = new WeakMap([[beforeEditor, 0], [afterEditor, 0]]);
 function invalidateEditorImport(editor) {
   editorImportVersions.set(editor, editorImportVersions.get(editor) + 1);
@@ -172,6 +185,93 @@ function renderReport(report) {
   }
   renderChangeRows();
 }
+
+function invalidateInspection() {
+  latestInspection = null;
+  inspectionPage = 0;
+  inspectionPanel.hidden = true;
+  inspectionRows.replaceChildren();
+  inspectionSummary.textContent = '';
+  inspectionType.value = 'all';
+  inspectionPath.value = '';
+  inspectionNav.hidden = true;
+}
+
+function renderInspection() {
+  if (!latestInspection) return;
+  const { rows, counts, byOp } = latestInspection;
+  const type = inspectionType.value;
+  const needle = inspectionPath.value.trim().toLocaleLowerCase();
+  const matches = rows.filter(row =>
+    (type === 'all' || row.op === type) &&
+    (!needle || row.path.toLocaleLowerCase().includes(needle) ||
+      row.from.toLocaleLowerCase().includes(needle))
+  );
+  const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  inspectionPage = Math.min(inspectionPage, pages - 1);
+  const start = inspectionPage * PAGE_SIZE;
+  const visible = matches.slice(start, start + PAGE_SIZE);
+  const operationTypes = Object.entries(byOp).map(([op, count]) => op + ': ' + count);
+  inspectionPanel.hidden = false;
+  inspectionSummary.textContent = counts.total + ' operations; ' +
+    counts.warnings + ' basic-shape warnings. ' +
+    matches.length + ' match the filters. ' + operationTypes.join(' · ') +
+    '. No operations have been applied.';
+  inspectionNav.hidden = matches.length <= PAGE_SIZE;
+  inspectionPrevious.disabled = inspectionPage === 0;
+  inspectionNext.disabled = inspectionPage >= pages - 1;
+  inspectionPageSummary.textContent = 'Page ' + (inspectionPage + 1) + ' of ' + pages;
+
+  const fragment = document.createDocumentFragment();
+  if (!visible.length) {
+    const row = document.createElement('tr');
+    const message = cell('td', rows.length ?
+      'No patch operations match your filters.' : 'The patch has no operations.', 'empty');
+    message.colSpan = 6;
+    row.append(message);
+    fragment.append(row);
+  } else for (const operation of visible) {
+    const row = document.createElement('tr');
+    if (operation.issues) row.className = 'inspection-warning';
+    for (const value of [
+      String(operation.index), operation.op, operation.path, operation.from || '—',
+      operation.value, operation.issues || '—'
+    ]) {
+      row.append(cell('td', value));
+    }
+    fragment.append(row);
+  }
+  inspectionRows.replaceChildren(fragment);
+}
+function refreshInspectionFilters() {
+  inspectionPage = 0;
+  renderInspection();
+}
+inspectionType.addEventListener('change', refreshInspectionFilters);
+inspectionPath.addEventListener('input', refreshInspectionFilters);
+inspectionPrevious.addEventListener('click', () => {
+  if (!latestInspection || inspectionPage === 0) return;
+  inspectionPage--;
+  renderInspection();
+});
+inspectionNext.addEventListener('click', () => {
+  if (!latestInspection) return;
+  inspectionPage++;
+  renderInspection();
+});
+inspectPatchButton.addEventListener('click', () => {
+  invalidateInspection();
+  try {
+    fitInput(patchSource.value, 'Patch');
+    const instructions = parseJson(patchSource.value, 'JSON Patch');
+    latestInspection = inspectPatchOperations(instructions);
+    renderInspection();
+    patchMessage('Patch operations inspected without applying them. This is not an execution check.');
+  } catch (error) {
+    patchMessage('Cannot inspect patch: ' +
+      (error instanceof Error ? error.message : 'invalid patch'), true);
+  }
+});
 
 function invalidatePatchResult() {
   lastApplied = null;
@@ -376,6 +476,7 @@ document.querySelector('#clear').addEventListener('click', () => {
   afterEditor.value = '';
   patchSource.value = '';
   patchImportSequence++;
+  invalidateInspection();
   resetReport();
   setStatus('Editors cleared.');
   beforeEditor.focus();
@@ -704,6 +805,7 @@ patchFile.addEventListener('change', async event => {
         !confirm('Replace the patch currently in the editor with the imported file?')) return;
     if (request !== patchImportSequence) return;
     patchSource.value = contents;
+    invalidateInspection();
     invalidatePatchResult();
     patchMessage('Local patch file loaded. Select Preview applying patch to inspect the result.');
   } catch (error) {
@@ -716,6 +818,7 @@ patchFile.addEventListener('change', async event => {
 document.querySelector('#preview-patch').addEventListener('click', previewPatch);
 patchSource.addEventListener('input', () => {
   patchImportSequence++;
+  invalidateInspection();
   invalidatePatchResult();
   patchMessage('Patch text changed. Preview again before using the result.');
 });
@@ -726,6 +829,7 @@ useGeneratedButton.addEventListener('click', () => {
       !confirm('Replace the current patch editor with the generated patch?')) return;
   patchImportSequence++;
   patchSource.value = generatedText;
+  invalidateInspection();
   patchBase.value = patchDirection.value === 'reverse' ? 'after' : 'before';
   updateResultTarget();
   invalidatePatchResult();
