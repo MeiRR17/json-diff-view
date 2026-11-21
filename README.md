@@ -13,6 +13,7 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 - Copy a JSON change report to your clipboard.
 - Export a **standards-based RFC 6902 JSON Patch** as a bare JSON array, through clipboard or a downloadable `.jsonpatch` file.
 - Preview applying a JSON Patch to a **detached copy** of the Before document, inspect the resulting JSON, download it, or explicitly send it to the After editor for comparison.
+- Import a local `.jsonpatch` or `.json` file into the patch editor. The import validates that it contains an array of at most 5,000 operations and respects the 2 MiB file limit; **it does not execute the patch or change either document**. If patch text is already present, replacing it requires confirmation.
 - Keyboard shortcut: **Ctrl+Enter** (Windows/Linux) or **⌘+Enter** (macOS).
 - Responsive layout with keyboard-accessible controls, light and dark themes.
 
@@ -41,7 +42,7 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 - The Patch preview accepts **only** the \`add\`, \`remove\`, and \`replace\` operation subset. It rejects \`move\`, \`copy\`, \`test\`, invalid JSON Pointer escapes, missing paths and invalid array indices, rather than silently applying incorrect operations.
 - An empty path targets the document root for add/replace. Removing the root document is unsupported. Arrays may be appended with \`-\` in an add operation; array indexes are otherwise canonical decimals.
 - Patch application never mutates the input JSON value. Object property reads require own properties; assignments use safe property definition for keys such as \`__proto__\`. Invalid operations abort without returning a partially modified document.
-- The result preview is capped at **2 MiB** and is not written into either editor until **Send result to After** is clicked. If After already has content, the tool requests confirmation before replacing it.
+- The result preview is capped at **2 MiB** and is not written into either editor until **Send result to After** is clicked. Importing a patch performs file reading and shape/size checks only; semantic validation occurs during explicit Preview. In-flight file loads are ignored when the patch editor changes, preventing stale asynchronous imports from replacing typed instructions. If After already has content, the tool requests confirmation before replacing it.
 
 - Input is limited to **2 MiB per editor**. Traversal has limits of 100,000 visited nodes, nesting depth 200 and 5,000 shown differences. A truncated report is explicitly marked as such.
 - Long values in the visual table have shortened previews; the copied report contains their full content.
