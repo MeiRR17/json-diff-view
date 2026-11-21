@@ -80,3 +80,11 @@ a{color:#155a98}
 .results-nav span{color:#536b84;font-size:.84rem}
 @media(max-width:700px){.filter-controls label{width:100%}.filter-controls select{flex:1 1 155px}}
 @media(prefers-color-scheme:dark){.filter-controls label,.filter-summary,.results-nav span{color:#b6cce3}.filter-controls input,.filter-controls select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Explicit opt-in for RFC 6902 optimistic-value guards on generated patches. */
+.patch-guard-option{display:flex;align-items:center;gap:9px;margin:2px 0 0;font-size:.89rem;font-weight:650;cursor:pointer}
+.patch-guard-option input{width:17px;height:17px;accent-color:#175c9f;flex:none}
+.patch-guard-option input:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.patch-guard-option code{font:inherit;font-weight:800}
+.patch-guard-hint{margin:4px 0 15px!important}
+@media(prefers-color-scheme:dark){.patch-guard-option input{accent-color:#76c6ff}}

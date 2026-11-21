@@ -22,6 +22,7 @@ const pageSummary = document.querySelector('#page-summary');
 const copyButton = document.querySelector('#copy');
 const copyPatchButton = document.querySelector('#copy-patch');
 const downloadPatchButton = document.querySelector('#download-patch');
+const guardPatchCheckbox = document.querySelector('#guard-patch');
 const patchSource = document.querySelector('#patch-source');
 const patchResult = document.querySelector('#patch-result');
 const patchStatus = document.querySelector('#patch-status');
@@ -34,6 +35,7 @@ const downloadResultButton = document.querySelector('#download-result');
 let latestReport = null;
 let currentPage = 0;
 let latestPatch = null;
+let latestComparison = null;
 let lastApplied = null;
 let patchImportSequence = 0;
 const editorImportVersions = new WeakMap([[beforeEditor, 0], [afterEditor, 0]]);
@@ -170,6 +172,7 @@ function resetReport() {
   useGeneratedButton.disabled = true;
   latestReport = null;
   latestPatch = null;
+  latestComparison = null;
   copyButton.disabled = true;
   copyPatchButton.disabled = downloadPatchButton.disabled = true;
   summary.hidden = true;
@@ -179,6 +182,41 @@ function resetReport() {
   message.colSpan = 3;
   row.append(message);
   changeRows.replaceChildren(row);
+}
+
+function refreshGeneratedPatch() {
+  latestPatch = null;
+  copyPatchButton.disabled = true;
+  downloadPatchButton.disabled = true;
+  useGeneratedButton.disabled = true;
+  summary.querySelector('#patch-count')?.remove();
+  if (!latestComparison) return '';
+
+  const indicator = cell('span', '', 'pill');
+  indicator.id = 'patch-count';
+  summary.append(indicator);
+  try {
+    const guarded = guardPatchCheckbox.checked;
+    const operations = createJsonPatch(
+      latestComparison.before,
+      latestComparison.after,
+      { guardChanges: guarded }
+    );
+    // Keep generated downloads compatible with the editor's 2 MiB import
+    // limit, including guard values that might make the output much larger.
+    fitInput(serializeJsonPatch(operations), 'Generated JSON Patch');
+    latestPatch = operations;
+    copyPatchButton.disabled = false;
+    downloadPatchButton.disabled = false;
+    useGeneratedButton.disabled = false;
+    indicator.textContent = (guarded ? 'Guarded' : 'Standard') +
+      ' JSON Patch: ' + operations.length + ' operations';
+    return '';
+  } catch (error) {
+    indicator.textContent = 'JSON Patch unavailable';
+    return ' Patch unavailable: ' +
+      (error instanceof Error ? error.message : 'could not generate patch');
+  }
 }
 
 function compare() {
@@ -194,21 +232,8 @@ function compare() {
     renderReport(report);
     copyButton.disabled = false;
 
-    // JSON Patch is generated independently of the visual diff. A patch that
-    // exceeds operation limits is never exported incompletely.
-    let patchStatus = '';
-    try {
-      latestPatch = createJsonPatch(left, right);
-      copyPatchButton.disabled = downloadPatchButton.disabled = false;
-      useGeneratedButton.disabled = false;
-      summary.append(cell('span', 'JSON Patch: ' + latestPatch.length + ' operations', 'pill'));
-    } catch (patchError) {
-      latestPatch = null;
-      copyPatchButton.disabled = downloadPatchButton.disabled = true;
-      useGeneratedButton.disabled = true;
-      patchStatus = ' Patch unavailable: ' + (patchError.message || 'too many operations') + '.';
-      summary.append(cell('span', 'JSON Patch unavailable', 'pill'));
-    }
+    latestComparison = { before: left, after: right };
+    const patchStatus = refreshGeneratedPatch();
     const count = report.changes.length;
     setStatus(
       (count === 0 ? 'Comparison complete: no differences.' :
@@ -287,6 +312,14 @@ nextPageButton.addEventListener('click', () => {
   if (!latestReport) return;
   currentPage++;
   renderChangeRows();
+});
+
+guardPatchCheckbox.addEventListener('change', () => {
+  if (!latestComparison) return;
+  const message = refreshGeneratedPatch();
+  setStatus(message ? message.trim() :
+    'Generated patch updated. The visual comparison and patch editor are unchanged.',
+    Boolean(message));
 });
 
 document.querySelector('#compare').addEventListener('click', compare);

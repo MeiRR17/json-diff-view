@@ -61,6 +61,11 @@
           <button class="button subtle" type="button" id="download-patch" disabled>↓ Download .jsonpatch</button>
         </div>
       </div>
+      <label class="patch-guard-option" for="guard-patch">
+        <input type="checkbox" id="guard-patch">
+        Generate guarded JSON Patch (add <code>test</code> before removes and replacements)
+      </label>
+      <p class="hint patch-guard-hint">Guards reject unexpected values at changed paths; additions and unrelated changes are not guarded. Large guarded patches may exceed the export limits.</p>
       <div id="summary" class="summary" aria-live="polite" hidden></div>
       <div class="filter-controls" role="group" aria-label="Filter differences">
         <label for="filter-path">JSON path contains</label>
@@ -118,7 +123,7 @@
     </section>
     <aside class="note">
       <h2>How comparison works</h2>
-      <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates RFC 6902 add/remove/replace operations.</p>
+      <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
       <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
