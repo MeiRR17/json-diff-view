@@ -65,3 +65,18 @@ a{color:#155a98}
 
 /* Local Patch file import, without changing either JSON editor. */
 .patch-file-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.patch-file-actions .button:focus-visible{outline:2px solid #abc7fa;outline-offset:2px}@media(max-width:620px){.patch-file-actions{width:100%}.patch-file-actions .button{flex:1 1 auto}}
+
+/* Filter the recorded comparison without changing report or patch exports. */
+.filter-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 14px}
+.filter-controls label{font-size:.84rem;font-weight:650;color:#3d5471}
+.filter-controls input,.filter-controls select{font:inherit;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px;padding:9px 11px;min-height:39px}
+.filter-controls input{flex:2 1 220px;min-width:150px}
+.filter-controls select{flex:0 1 170px}
+.filter-controls input:focus-visible,.filter-controls select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.filter-controls input:disabled,.filter-controls select:disabled{opacity:.6;cursor:not-allowed}
+.filter-summary{flex:1 0 100%;color:#536b84;font-size:.82rem}
+.results-nav{display:flex;justify-content:center;align-items:center;gap:13px;flex-wrap:wrap;margin:16px 0 0}
+.results-nav[hidden]{display:none}
+.results-nav span{color:#536b84;font-size:.84rem}
+@media(max-width:700px){.filter-controls label{width:100%}.filter-controls select{flex:1 1 155px}}
+@media(prefers-color-scheme:dark){.filter-controls label,.filter-summary,.results-nav span{color:#b6cce3}.filter-controls input,.filter-controls select{color:#e3f1ff;background:#19293b;border-color:#536783}}

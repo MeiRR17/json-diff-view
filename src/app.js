@@ -4,12 +4,21 @@ import { applyJsonPatch } from './apply.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
+const PAGE_SIZE = 100;
 
 const beforeEditor = document.querySelector('#before');
 const afterEditor = document.querySelector('#after');
 const status = document.querySelector('#status');
 const summary = document.querySelector('#summary');
 const changeRows = document.querySelector('#changes');
+const filterPath = document.querySelector('#filter-path');
+const filterType = document.querySelector('#filter-type');
+const clearFiltersButton = document.querySelector('#clear-filters');
+const filterSummary = document.querySelector('#filter-summary');
+const pageNavigation = document.querySelector('#results-nav');
+const previousPageButton = document.querySelector('#page-previous');
+const nextPageButton = document.querySelector('#page-next');
+const pageSummary = document.querySelector('#page-summary');
 const copyButton = document.querySelector('#copy');
 const copyPatchButton = document.querySelector('#copy-patch');
 const downloadPatchButton = document.querySelector('#download-patch');
@@ -23,6 +32,7 @@ const sendResultButton = document.querySelector('#send-result');
 const downloadResultButton = document.querySelector('#download-result');
 
 let latestReport = null;
+let currentPage = 0;
 let latestPatch = null;
 let lastApplied = null;
 let patchImportSequence = 0;
@@ -61,35 +71,47 @@ function cell(tag, text, className = '') {
   return el;
 }
 
-function renderReport(report) {
-  changeRows.replaceChildren();
-  summary.replaceChildren();
-  summary.hidden = false;
+function renderChangeRows() {
+  if (!latestReport) return;
 
-  for (const [label, n, cssClass] of [
-    ['Added', report.counts.added, 'added'],
-    ['Removed', report.counts.removed, 'removed'],
-    ['Changed', report.counts.changed, 'changed']
-  ]) {
-    const pill = cell('span', label + ': ' + n, 'pill ' + cssClass);
-    summary.append(pill);
-  }
+  const pathNeedle = filterPath.value.trim().toLocaleLowerCase();
+  const type = filterType.value;
+  const allChanges = latestReport.changes;
+  const matches = allChanges.filter(change =>
+    (type === 'all' || change.type === type) &&
+    (!pathNeedle || change.path.toLocaleLowerCase().includes(pathNeedle))
+  );
 
-  if (report.truncated) {
-    summary.append(cell('span', 'Showing first 5,000 changes', 'pill'));
-  }
+  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  currentPage = Math.min(currentPage, pageCount - 1);
+  const start = currentPage * PAGE_SIZE;
+  const visible = matches.slice(start, start + PAGE_SIZE);
 
-  if (!report.changes.length) {
+  clearFiltersButton.disabled = !filterPath.value && type === 'all';
+  filterSummary.textContent = matches.length + ' of ' + allChanges.length +
+    ' reported changes match the filters.' +
+    (latestReport.truncated ? ' Report truncated at 5,000 changes.' : '');
+
+  pageNavigation.hidden = matches.length <= PAGE_SIZE;
+  previousPageButton.disabled = currentPage === 0;
+  nextPageButton.disabled = currentPage >= pageCount - 1;
+  pageSummary.textContent = 'Page ' + (currentPage + 1) + ' of ' + pageCount +
+    ' (' + (matches.length ? start + 1 : 0) + '–' + (start + visible.length) +
+    ' of ' + matches.length + ' matches)';
+
+  if (!visible.length) {
     const row = document.createElement('tr');
-    const message = cell('td', 'No differences. Both JSON documents contain the same values.', 'empty');
+    const message = cell('td', allChanges.length ?
+      'No differences match your filters.' :
+      'No differences. Both JSON documents contain the same values.', 'empty');
     message.colSpan = 3;
     row.append(message);
-    changeRows.append(row);
+    changeRows.replaceChildren(row);
     return;
   }
 
   const fragment = document.createDocumentFragment();
-  for (const change of report.changes) {
+  for (const change of visible) {
     const row = document.createElement('tr');
     row.className = change.type;
 
@@ -106,7 +128,27 @@ function renderReport(report) {
     row.append(before, after);
     fragment.append(row);
   }
-  changeRows.append(fragment);
+  changeRows.replaceChildren(fragment);
+}
+
+function renderReport(report) {
+  summary.replaceChildren();
+  summary.hidden = false;
+  filterPath.disabled = false;
+  filterType.disabled = false;
+
+  for (const [label, n, cssClass] of [
+    ['Added', report.counts.added, 'added'],
+    ['Removed', report.counts.removed, 'removed'],
+    ['Changed', report.counts.changed, 'changed']
+  ]) {
+    summary.append(cell('span', label + ': ' + n, 'pill ' + cssClass));
+  }
+
+  if (report.truncated) {
+    summary.append(cell('span', 'Showing first 5,000 changes', 'pill'));
+  }
+  renderChangeRows();
 }
 
 function invalidatePatchResult() {
@@ -117,6 +159,14 @@ function invalidatePatchResult() {
 }
 function resetReport() {
   invalidatePatchResult();
+  currentPage = 0;
+  filterPath.value = '';
+  filterType.value = 'all';
+  filterPath.disabled = true;
+  filterType.disabled = true;
+  clearFiltersButton.disabled = true;
+  filterSummary.textContent = 'Compare documents to filter changes.';
+  pageNavigation.hidden = true;
   useGeneratedButton.disabled = true;
   latestReport = null;
   latestPatch = null;
@@ -214,6 +264,30 @@ const sampleAfter = {
   users: [{ id: 1, role: 'editor' }, { id: 2, role: 'editor' }, { id: 3, role: 'viewer' }],
   documentation: 'ready'
 };
+
+function refreshFilters() {
+  currentPage = 0;
+  renderChangeRows();
+}
+
+filterPath.addEventListener('input', refreshFilters);
+filterType.addEventListener('change', refreshFilters);
+clearFiltersButton.addEventListener('click', () => {
+  filterPath.value = '';
+  filterType.value = 'all';
+  refreshFilters();
+  filterPath.focus();
+});
+previousPageButton.addEventListener('click', () => {
+  if (!latestReport || currentPage === 0) return;
+  currentPage--;
+  renderChangeRows();
+});
+nextPageButton.addEventListener('click', () => {
+  if (!latestReport) return;
+  currentPage++;
+  renderChangeRows();
+});
 
 document.querySelector('#compare').addEventListener('click', compare);
 document.querySelector('#swap').addEventListener('click', () => {

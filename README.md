@@ -8,7 +8,7 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 
 - Paste JSON in two side-by-side editors or open local \`.json\` files. Imported documents are syntax-checked and require confirmation before replacing existing contents; stale asynchronous file loads cannot overwrite edits, swapped documents, cleared editors or a newly loaded sample.
 - Compare object keys and nested structures with exact \`$\` paths.
-- Highlight additions, removals, and changes in aligned before/after columns.
+- Highlight additions, removals, and changes in aligned before/after columns. Filter recorded changes by a case-insensitive JSON path substring and by change type; navigate 100-result pages without rendering all 5,000 entries simultaneously.
 - Load an illustrative sample, swap documents, or clear editors.
 - Copy a JSON change report to your clipboard.
 - Export a **standards-based RFC 6902 JSON Patch** as a bare JSON array, through clipboard or a downloadable `.jsonpatch` file.
@@ -35,7 +35,7 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 - Arrays are compared **by index**, not by record ID or edit distance. Inserting an item near the front can produce several changed-index entries.
 - Numbers, strings, booleans, and \`null\` compare by value. Unlike text diffs, \`1\` and \`1.0\` represent the same JSON number.
 - Added or removed nested objects/arrays appear as a single path containing the full value, rather than one row per descendant.
-- The **visual change report** is still a descriptive list of before/after values and is **not itself a patch**.
+- The **visual change report** is still a descriptive list of before/after values and is **not itself a patch**. On-screen path/type filters and pagination only change the displayed rows; **Copy change report** and JSON Patch exports still use the complete comparison, not the current filtered page.
 - The **separate JSON Patch export** emits RFC 6902 `add`, `remove`, and `replace` operations (without `move`, `copy`, or `test`). The **import/apply** editor additionally understands external `test`, `copy`, and `move` operations. Object paths use JSON Pointer escaping (`~0` for `~`, `~1` for `/`). The root document path is the empty string.
 - Array changes are index-based: common positions are compared, excess trailing entries are removed from highest index to lowest, and new trailing entries are added in increasing index order. This does not infer semantic moves or record IDs.
 - If the transformation needs more than 5,000 operations, the tool refuses to export a potentially incomplete patch. Review any patch before applying it to production data.
@@ -45,7 +45,7 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 - Patch application never mutates the input JSON value. Object property reads require own properties; assignments use safe property definition for keys such as \`__proto__\`. Invalid operations abort without returning a partially modified document.
 - The result preview is capped at **2 MiB** and is not written into either editor until **Send result to After** is clicked. Importing a patch performs file reading and shape/size checks only; semantic validation occurs during explicit Preview. In-flight file loads are ignored when the patch editor changes, preventing stale asynchronous imports from replacing typed instructions. If After already has content, the tool requests confirmation before replacing it.
 
-- Input is limited to **2 MiB per editor**. Traversal has limits of 100,000 visited nodes, nesting depth 200 and 5,000 shown differences. A truncated report is explicitly marked as such.
+- Input is limited to **2 MiB per editor**. Traversal has limits of 100,000 visited nodes, nesting depth 200 and 5,000 recorded differences. The table displays up to 100 rows per page, with filters operating on those recorded differences; a truncated report is explicitly marked as such.
 - Long values in the visual table have shortened previews; the copied report contains their full content.
 
 ## Project layout

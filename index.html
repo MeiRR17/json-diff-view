@@ -62,6 +62,19 @@
         </div>
       </div>
       <div id="summary" class="summary" aria-live="polite" hidden></div>
+      <div class="filter-controls" role="group" aria-label="Filter differences">
+        <label for="filter-path">JSON path contains</label>
+        <input id="filter-path" type="search" placeholder="e.g. $.settings" autocomplete="off" disabled>
+        <label for="filter-type">Change type</label>
+        <select id="filter-type" disabled>
+          <option value="all">All types</option>
+          <option value="added">Added</option>
+          <option value="removed">Removed</option>
+          <option value="changed">Changed</option>
+        </select>
+        <button class="button subtle" id="clear-filters" type="button" disabled>Reset filters</button>
+        <span id="filter-summary" class="filter-summary" aria-live="polite">Compare documents to filter changes.</span>
+      </div>
       <div class="results-scroll">
         <table class="diff-table">
           <thead><tr><th scope="col">JSON path</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
@@ -70,6 +83,11 @@
           </tbody>
         </table>
       </div>
+      <nav class="results-nav" id="results-nav" aria-label="Difference pages" hidden>
+        <button class="button subtle" type="button" id="page-previous">Previous page</button>
+        <span id="page-summary" aria-live="polite"></span>
+        <button class="button subtle" type="button" id="page-next">Next page</button>
+      </nav>
     </section>
     <section class="patch-workspace" aria-labelledby="patch-heading">
       <div class="section-heading">
@@ -101,7 +119,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates RFC 6902 add/remove/replace operations.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>
