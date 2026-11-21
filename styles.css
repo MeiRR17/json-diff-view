@@ -183,3 +183,14 @@ a{color:#155a98}
 .range-summary{font-size:.87rem;font-weight:650;color:#3d5471;margin:12px 0}
 @media(max-width:700px){.patch-range-controls label,.range-filters label{width:100%}.range-filters select{flex:1 1 160px}.patch-range-review .result-actions{justify-content:flex-start;width:100%}}
 @media(prefers-color-scheme:dark){.patch-range-review{border-color:#3b5068}.patch-range-controls label,.range-filters label,.range-summary{color:#b6cce3}.patch-range-controls input,.range-filters input,.range-filters select{background:#19293b;color:#e3f1ff;border-color:#536783}}
+
+/* Optional RFC 6902 generation from two detached checkpoint values. */
+.range-patch-export{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0 3px}
+.range-patch-export label{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.84rem;font-weight:650;color:#3d5471}
+.range-patch-export input{accent-color:#175c9f;width:17px;height:17px;flex:none}
+.range-patch-export input:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.range-patch-export code{font:inherit}
+.range-patch-warning{margin:8px 0!important}
+.range-patch-status{font-size:.84rem;color:#3d5471;margin:7px 0 14px;overflow-wrap:anywhere}
+@media(max-width:700px){.range-patch-export label{width:100%}.range-patch-export .button{flex:1 1 170px}}
+@media(prefers-color-scheme:dark){.range-patch-export label,.range-patch-status{color:#b6cce3}.range-patch-export input{accent-color:#76c6ff}}

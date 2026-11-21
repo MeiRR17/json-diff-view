@@ -95,6 +95,10 @@ const rangePageSummary = document.querySelector('#range-page-summary');
 const copyRangeButton = document.querySelector('#copy-range');
 const downloadRangeJsonButton = document.querySelector('#download-range-json');
 const downloadRangeCsvButton = document.querySelector('#download-range-csv');
+const guardRangePatchCheckbox = document.querySelector('#range-guard-patch');
+const rangePatchStatus = document.querySelector('#range-patch-status');
+const copyRangePatchButton = document.querySelector('#copy-range-patch');
+const downloadRangePatchButton = document.querySelector('#download-range-patch');
 
 let latestReport = null;
 let currentPage = 0;
@@ -240,6 +244,9 @@ function invalidateRange(message = 'Choose two steps to compare their cumulative
   copyRangeButton.disabled = true;
   downloadRangeJsonButton.disabled = true;
   downloadRangeCsvButton.disabled = true;
+  copyRangePatchButton.disabled = true;
+  downloadRangePatchButton.disabled = true;
+  rangePatchStatus.textContent = '';
   rangeMessage(message);
 }
 function rangeMessage(message, isError = false) {
@@ -262,6 +269,66 @@ function rangeSource(snapshot) {
   return patchSideLabel(snapshot.source) + ': step ' +
     snapshot.start + ' → step ' + snapshot.end;
 }
+function refreshRangePatch() {
+  copyRangePatchButton.disabled = true;
+  downloadRangePatchButton.disabled = true;
+  if (!latestRange) {
+    rangePatchStatus.textContent = '';
+    return;
+  }
+  latestRange.patch = null;
+  try {
+    // The patch is derived from endpoint values, not by slicing the input
+    // instruction list. Intermediate changes that canceled out disappear.
+    const generated = createJsonPatch(latestRange.before, latestRange.after, {
+      guardChanges: guardRangePatchCheckbox.checked
+    });
+    const serialized = serializeJsonPatch(generated);
+    fitInput(serialized, 'Generated checkpoint-range JSON Patch');
+    latestRange.patch = serialized;
+    copyRangePatchButton.disabled = false;
+    downloadRangePatchButton.disabled = false;
+    rangePatchStatus.textContent = (guardRangePatchCheckbox.checked ? 'Guarded' : 'Standard') +
+      ' checkpoint patch available: ' + generated.length +
+      ' operations. Apply it to the document at step ' + latestRange.start +
+      ', not directly to the original source when the start is later than step 0.';
+  } catch (error) {
+    rangePatchStatus.textContent = 'Checkpoint patch unavailable: ' +
+      (error instanceof Error ? error.message : 'could not generate patch') +
+      '. The step-range difference report is still available.';
+  }
+}
+guardRangePatchCheckbox.addEventListener('change', () => {
+  if (!latestRange) return;
+  if (!currentRange()) return;
+  refreshRangePatch();
+});
+copyRangePatchButton.addEventListener('click', async () => {
+  const snapshot = currentRange();
+  if (!snapshot || !snapshot.patch) return;
+  try {
+    await navigator.clipboard.writeText(snapshot.patch);
+    rangeMessage('Checkpoint-range JSON Patch copied. Its base is step ' +
+      snapshot.start + ', not necessarily the original document.');
+  } catch {
+    rangeMessage('Unable to copy checkpoint-range patch. Check clipboard permissions.', true);
+  }
+});
+downloadRangePatchButton.addEventListener('click', () => {
+  const snapshot = currentRange();
+  if (!snapshot || !snapshot.patch) return;
+  try {
+    downloadReport(snapshot.patch, 'patch-' + snapshot.source +
+      '-range-' + snapshot.start + '-to-' + snapshot.end +
+      (guardRangePatchCheckbox.checked ? '-guarded' : '') + '.jsonpatch',
+    'application/json;charset=utf-8');
+    rangeMessage('Checkpoint-range JSON Patch downloaded; apply to the step ' +
+      snapshot.start + ' document.');
+  } catch (error) {
+    rangeMessage('Checkpoint patch download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
 function renderRange() {
   if (!latestRange) return;
   const { report, start, end } = latestRange;
@@ -335,8 +402,13 @@ function previewRange() {
     // even when the recorded structural difference is much smaller.
     fitInput(JSON.stringify(result.before), 'Starting checkpoint');
     fitInput(JSON.stringify(result.after), 'Ending checkpoint');
-    latestRange = { source, sourceText, patchText, start, end, report: result.report };
+    latestRange = {
+      source, sourceText, patchText, start, end,
+      before: result.before, after: result.after,
+      report: result.report, patch: null
+    };
     renderRange();
+    refreshRangePatch();
     rangeMessage('Compared step ' + start + ' with step ' + end +
       ' on a detached copy of ' + patchSideLabel(source) +
       '. No editor content changed.' +
