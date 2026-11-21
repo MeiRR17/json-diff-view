@@ -166,3 +166,20 @@ a{color:#155a98}
 .patch-step-impact .section-heading h4{margin:0}
 .patch-step-impact .result-actions{margin-left:auto}
 @media(max-width:700px){.step-export-actions .button{flex:1 1 150px}.patch-step-impact .result-actions{width:100%;justify-content:flex-start}}
+
+/* Arbitrary patch checkpoint comparison: two independently replayed prefixes. */
+.patch-range-review{margin:22px 0 6px;padding:18px 0;border-top:1px solid #d8e1ed}
+.patch-range-review h3{font-size:1rem;margin:0}
+.patch-range-review h4{font-size:.95rem;margin:0}
+.patch-range-controls,.range-filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0 14px}
+.patch-range-controls label,.range-filters label{font-size:.84rem;font-weight:650;color:#3d5471}
+.patch-range-controls input,.range-filters input,.range-filters select{font:inherit;background:#fff;color:#18324d;border:1px solid #bdcde0;border-radius:8px;padding:9px 11px;min-height:39px;max-width:100%}
+.patch-range-controls input{min-width:80px;width:105px}
+.range-filters input{flex:2 1 160px}
+.range-filters select{flex:0 1 160px}
+.patch-range-controls input:focus-visible,.range-filters input:focus-visible,.range-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.patch-range-review #range-status{margin:8px 0 16px}
+.patch-range-review #range-results>.section-heading{flex-wrap:wrap;gap:12px}
+.range-summary{font-size:.87rem;font-weight:650;color:#3d5471;margin:12px 0}
+@media(max-width:700px){.patch-range-controls label,.range-filters label{width:100%}.range-filters select{flex:1 1 160px}.patch-range-review .result-actions{justify-content:flex-start;width:100%}}
+@media(prefers-color-scheme:dark){.patch-range-review{border-color:#3b5068}.patch-range-controls label,.range-filters label,.range-summary{color:#b6cce3}.patch-range-controls input,.range-filters input,.range-filters select{background:#19293b;color:#e3f1ff;border-color:#536783}}

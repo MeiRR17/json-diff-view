@@ -206,6 +206,52 @@
           </nav>
         </section>
       </section>
+      <section class="patch-range-review" aria-labelledby="range-heading">
+        <h3 id="range-heading">Compare two patch steps</h3>
+        <p class="hint">Compare the document after step A with the document after step B. Both checkpoints replay the same source from the beginning. Only the net changes between A and B are shown; operations after B are not run.</p>
+        <div class="patch-range-controls">
+          <label for="range-start">From step</label>
+          <input id="range-start" type="number" min="0" max="5000" step="1" value="0">
+          <label for="range-end">To step</label>
+          <input id="range-end" type="number" min="0" max="5000" step="1" value="1">
+          <button class="button subtle" type="button" id="range-preview">Compare steps</button>
+        </div>
+        <p class="status" id="range-status" role="status" aria-live="polite">Choose two steps to compare their cumulative effect.</p>
+        <section id="range-results" aria-labelledby="range-results-heading" hidden>
+          <div class="section-heading">
+            <h4 id="range-results-heading">Changes between checkpoints</h4>
+            <div class="result-actions">
+              <button class="button subtle" type="button" id="copy-range" disabled>Copy full range report</button>
+              <button class="button subtle" type="button" id="download-range-json" disabled>↓ Range JSON</button>
+              <button class="button subtle" type="button" id="download-range-csv" disabled>↓ Range CSV</button>
+            </div>
+          </div>
+          <p class="hint">Report exports contain all recorded differences, regardless of filters or pages.</p>
+          <p class="range-summary" id="range-summary" role="status" aria-live="polite"></p>
+          <div class="range-filters" role="group" aria-label="Filter checkpoint differences">
+            <label for="range-filter-path">JSON path contains</label>
+            <input id="range-filter-path" type="search" placeholder="e.g. $.settings" autocomplete="off">
+            <label for="range-filter-type">Change type</label>
+            <select id="range-filter-type">
+              <option value="all">All types</option>
+              <option value="added">Added</option>
+              <option value="removed">Removed</option>
+              <option value="changed">Changed</option>
+            </select>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">JSON path</th><th scope="col">From step</th><th scope="col">To step</th></tr></thead>
+              <tbody id="range-rows"></tbody>
+            </table>
+          </div>
+          <nav class="results-nav" id="range-nav" aria-label="Checkpoint difference pages" hidden>
+            <button class="button subtle" type="button" id="range-previous">Previous page</button>
+            <span id="range-page-summary" aria-live="polite"></span>
+            <button class="button subtle" type="button" id="range-next">Next page</button>
+          </nav>
+        </section>
+      </section>
       <div class="actions">
         <button class="button primary" type="button" id="preview-patch">Preview applying patch</button>
         <button class="button subtle" type="button" id="send-result" disabled>Send result to After</button>
@@ -250,7 +296,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>

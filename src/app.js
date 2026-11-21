@@ -3,6 +3,7 @@ import { createJsonPatch, serializeJsonPatch } from './patch.js';
 import { applyJsonPatch, applyJsonPatchPrefix } from './apply.js';
 import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
+import { comparePatchRange } from './range.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -78,6 +79,22 @@ const downloadStepButton = document.querySelector('#download-patch-step');
 const copyStepImpactButton = document.querySelector('#copy-step-impact');
 const downloadStepImpactJsonButton = document.querySelector('#download-step-impact-json');
 const downloadStepImpactCsvButton = document.querySelector('#download-step-impact-csv');
+const rangeStartInput = document.querySelector('#range-start');
+const rangeEndInput = document.querySelector('#range-end');
+const rangePreviewButton = document.querySelector('#range-preview');
+const rangeStatus = document.querySelector('#range-status');
+const rangePanel = document.querySelector('#range-results');
+const rangeSummary = document.querySelector('#range-summary');
+const rangeRows = document.querySelector('#range-rows');
+const rangeFilterPath = document.querySelector('#range-filter-path');
+const rangeFilterType = document.querySelector('#range-filter-type');
+const rangeNav = document.querySelector('#range-nav');
+const rangePrevious = document.querySelector('#range-previous');
+const rangeNext = document.querySelector('#range-next');
+const rangePageSummary = document.querySelector('#range-page-summary');
+const copyRangeButton = document.querySelector('#copy-range');
+const downloadRangeJsonButton = document.querySelector('#download-range-json');
+const downloadRangeCsvButton = document.querySelector('#download-range-csv');
 
 let latestReport = null;
 let currentPage = 0;
@@ -92,6 +109,8 @@ let inspectionPage = 0;
 let latestStep = null;
 let latestStepImpact = null;
 let stepImpactPage = 0;
+let latestRange = null;
+let rangePage = 0;
 const editorImportVersions = new WeakMap([[beforeEditor, 0], [afterEditor, 0]]);
 function invalidateEditorImport(editor) {
   editorImportVersions.set(editor, editorImportVersions.get(editor) + 1);
@@ -206,6 +225,179 @@ function renderReport(report) {
   }
   renderChangeRows();
 }
+
+// Two arbitrary sequential checkpoints (0..N), distinct from the
+// one-operation step effect and full patch impact. Never mutates inputs.
+function invalidateRange(message = 'Choose two steps to compare their cumulative effect.') {
+  latestRange = null;
+  rangePage = 0;
+  rangePanel.hidden = true;
+  rangeRows.replaceChildren();
+  rangeSummary.textContent = '';
+  rangeNav.hidden = true;
+  rangeFilterPath.value = '';
+  rangeFilterType.value = 'all';
+  copyRangeButton.disabled = true;
+  downloadRangeJsonButton.disabled = true;
+  downloadRangeCsvButton.disabled = true;
+  rangeMessage(message);
+}
+function rangeMessage(message, isError = false) {
+  rangeStatus.textContent = message;
+  rangeStatus.classList.toggle('error', isError);
+}
+function currentRange() {
+  if (!latestRange || patchBase.value !== latestRange.source ||
+      patchEditor(latestRange.source).value !== latestRange.sourceText ||
+      patchSource.value !== latestRange.patchText ||
+      String(rangeStartInput.value) !== String(latestRange.start) ||
+      String(rangeEndInput.value) !== String(latestRange.end)) {
+    invalidateRange();
+    rangeMessage('Step-range comparison is stale. Compare the selected steps again.', true);
+    return null;
+  }
+  return latestRange;
+}
+function rangeSource(snapshot) {
+  return patchSideLabel(snapshot.source) + ': step ' +
+    snapshot.start + ' → step ' + snapshot.end;
+}
+function renderRange() {
+  if (!latestRange) return;
+  const { report, start, end } = latestRange;
+  const type = rangeFilterType.value;
+  const needle = rangeFilterPath.value.trim().toLocaleLowerCase();
+  const matches = report.changes.filter(change =>
+    (type === 'all' || change.type === type) &&
+    (!needle || change.path.toLocaleLowerCase().includes(needle))
+  );
+  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  rangePage = Math.min(rangePage, pageCount - 1);
+  const offset = rangePage * PAGE_SIZE;
+  const visible = matches.slice(offset, offset + PAGE_SIZE);
+  const counts = report.counts;
+  rangePanel.hidden = false;
+  rangeSummary.textContent = 'Step ' + start + ' → step ' + end + ': ' +
+    counts.added + ' added, ' + counts.removed + ' removed, ' +
+    counts.changed + ' changed. ' + matches.length + ' of ' +
+    report.changes.length + ' recorded differences match.' +
+    (report.truncated ? ' Report truncated at 5,000 differences.' : '');
+  copyRangeButton.disabled = false;
+  downloadRangeJsonButton.disabled = false;
+  downloadRangeCsvButton.disabled = false;
+  rangeNav.hidden = matches.length <= PAGE_SIZE;
+  rangePrevious.disabled = rangePage === 0;
+  rangeNext.disabled = rangePage >= pageCount - 1;
+  rangePageSummary.textContent = 'Page ' + (rangePage + 1) + ' of ' + pageCount;
+
+  const fragment = document.createDocumentFragment();
+  if (!visible.length) {
+    const row = document.createElement('tr');
+    const item = cell('td', report.changes.length ?
+      'No differences match the selected filters.' :
+      'No net structural change between the selected steps.', 'empty');
+    item.colSpan = 3;
+    row.append(item);
+    fragment.append(row);
+  } else for (const change of visible) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+    const pathCell = document.createElement('td');
+    pathCell.append(cell('span', change.type, 'tag'));
+    pathCell.append(document.createElement('br'));
+    pathCell.append(cell('span', change.path, 'path'));
+    const fromCell = document.createElement('td');
+    fromCell.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const toCell = document.createElement('td');
+    toCell.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(pathCell, fromCell, toCell);
+    fragment.append(row);
+  }
+  rangeRows.replaceChildren(fragment);
+}
+function previewRange() {
+  invalidateRange();
+  const source = patchBase.value;
+  const sourceText = patchEditor(source).value;
+  const patchText = patchSource.value;
+  try {
+    fitInput(sourceText, patchSideLabel(source));
+    fitInput(patchText, 'Patch');
+    if (rangeStartInput.value.trim() === '' || rangeEndInput.value.trim() === '') {
+      throw new RangeError('Both step numbers are required.');
+    }
+    const start = Number(rangeStartInput.value);
+    const end = Number(rangeEndInput.value);
+    const document = parseJson(sourceText, patchSideLabel(source));
+    const patch = parseJson(patchText, 'JSON Patch');
+    const result = comparePatchRange(document, patch, start, end);
+    // Both endpoints should fit within the application's document-size cap,
+    // even when the recorded structural difference is much smaller.
+    fitInput(JSON.stringify(result.before), 'Starting checkpoint');
+    fitInput(JSON.stringify(result.after), 'Ending checkpoint');
+    latestRange = { source, sourceText, patchText, start, end, report: result.report };
+    renderRange();
+    rangeMessage('Compared step ' + start + ' with step ' + end +
+      ' on a detached copy of ' + patchSideLabel(source) +
+      '. No editor content changed.' +
+      (result.report.truncated ? ' Results are truncated.' : ''));
+  } catch (error) {
+    rangeMessage('Could not compare steps: ' +
+      (error instanceof Error ? error.message : 'invalid patch'), true);
+  }
+}
+rangePreviewButton.addEventListener('click', previewRange);
+rangeStartInput.addEventListener('input', () => invalidateRange('Step range changed; compare again.'));
+rangeEndInput.addEventListener('input', () => invalidateRange('Step range changed; compare again.'));
+rangeFilterPath.addEventListener('input', () => { rangePage = 0; renderRange(); });
+rangeFilterType.addEventListener('change', () => { rangePage = 0; renderRange(); });
+rangePrevious.addEventListener('click', () => {
+  if (!currentRange() || rangePage === 0) return;
+  rangePage--;
+  renderRange();
+});
+rangeNext.addEventListener('click', () => {
+  if (!currentRange()) return;
+  rangePage++;
+  renderRange();
+});
+copyRangeButton.addEventListener('click', async () => {
+  const snapshot = currentRange();
+  if (!snapshot) return;
+  try {
+    await navigator.clipboard.writeText(serializeReportJson(snapshot.report, {
+      format: 'json-diff-view-step-range',
+      source: rangeSource(snapshot)
+    }));
+    rangeMessage('Full step-range report copied; filters do not affect the export.');
+  } catch {
+    rangeMessage('Could not copy step-range report. Check clipboard permissions.', true);
+  }
+});
+function downloadRange(format) {
+  const snapshot = currentRange();
+  if (!snapshot) return;
+  try {
+    const csv = format === 'csv';
+    const content = csv ?
+      serializeReportCsv(snapshot.report, { source: rangeSource(snapshot) }) :
+      serializeReportJson(snapshot.report, {
+        format: 'json-diff-view-step-range',
+        source: rangeSource(snapshot)
+      });
+    downloadReport(content,
+      'patch-' + snapshot.source + '-range-' +
+        snapshot.start + '-to-' + snapshot.end + '.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    rangeMessage('Full step-range report downloaded as ' + format.toUpperCase() +
+      (snapshot.report.truncated ? ' (truncated).' : '.'));
+  } catch (error) {
+    rangeMessage('Step-range download failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+downloadRangeJsonButton.addEventListener('click', () => downloadRange('json'));
+downloadRangeCsvButton.addEventListener('click', () => downloadRange('csv'));
 
 function invalidateStepPreview(message = 'Select a step and preview the detached document.') {
   latestStep = null;
@@ -572,6 +764,7 @@ function invalidatePatchResult() {
 function resetReport() {
   invalidatePatchResult();
   invalidateStepPreview();
+  invalidateRange();
   currentPage = 0;
   filterPath.value = '';
   filterType.value = 'all';
@@ -639,6 +832,7 @@ function refreshGeneratedPatch() {
 function compare() {
   invalidatePatchResult();
   invalidateStepPreview();
+  invalidateRange();
   useGeneratedButton.disabled = true;
   try {
     fitInput(beforeEditor.value, 'Before');
@@ -1056,6 +1250,7 @@ function previewPatch() {
 patchBase.addEventListener('change', () => {
   updateResultTarget();
   invalidateStepPreview();
+  invalidateRange();
   invalidatePatchResult();
   patchMessage('Patch source changed to ' + patchSideLabel(patchBase.value) +
     '. Preview again before using the result.');
@@ -1090,6 +1285,7 @@ patchFile.addEventListener('change', async event => {
     patchSource.value = contents;
     invalidateInspection();
     invalidateStepPreview();
+    invalidateRange();
     invalidatePatchResult();
     patchMessage('Local patch file loaded. Select Preview applying patch to inspect the result.');
   } catch (error) {
@@ -1104,6 +1300,7 @@ patchSource.addEventListener('input', () => {
   patchImportSequence++;
   invalidateInspection();
   invalidateStepPreview();
+  invalidateRange();
   invalidatePatchResult();
   patchMessage('Patch text changed. Preview again before using the result.');
 });
@@ -1116,6 +1313,7 @@ useGeneratedButton.addEventListener('click', () => {
   patchSource.value = generatedText;
   invalidateInspection();
   invalidateStepPreview();
+  invalidateRange();
   patchBase.value = patchDirection.value === 'reverse' ? 'after' : 'before';
   updateResultTarget();
   invalidatePatchResult();
