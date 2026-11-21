@@ -62,3 +62,6 @@ a{color:#155a98}
 .patch-workspace .actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
 .patch-workspace .actions .button{flex:1 1 160px}
 @media(max-width:670px){.patch-workspace{padding:15px}.patch-workspace .editors{display:grid;grid-template-columns:1fr;gap:13px}}
+
+/* Local Patch file import, without changing either JSON editor. */
+.patch-file-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.patch-file-actions .button:focus-visible{outline:2px solid #abc7fa;outline-offset:2px}@media(max-width:620px){.patch-file-actions{width:100%}.patch-file-actions .button{flex:1 1 auto}}
