@@ -1,5 +1,6 @@
 import { diffJson, parseJson } from './diff.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
+import { applyJsonPatch } from './apply.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -12,9 +13,16 @@ const changeRows = document.querySelector('#changes');
 const copyButton = document.querySelector('#copy');
 const copyPatchButton = document.querySelector('#copy-patch');
 const downloadPatchButton = document.querySelector('#download-patch');
+const patchSource = document.querySelector('#patch-source');
+const patchResult = document.querySelector('#patch-result');
+const patchStatus = document.querySelector('#patch-status');
+const useGeneratedButton = document.querySelector('#use-generated');
+const sendResultButton = document.querySelector('#send-result');
+const downloadResultButton = document.querySelector('#download-result');
 
 let latestReport = null;
 let latestPatch = null;
+let lastApplied = null;
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -90,7 +98,15 @@ function renderReport(report) {
   changeRows.append(fragment);
 }
 
+function invalidatePatchResult() {
+  lastApplied = null;
+  patchResult.value = '';
+  sendResultButton.disabled = true;
+  downloadResultButton.disabled = true;
+}
 function resetReport() {
+  invalidatePatchResult();
+  useGeneratedButton.disabled = true;
   latestReport = null;
   latestPatch = null;
   copyButton.disabled = true;
@@ -105,6 +121,8 @@ function resetReport() {
 }
 
 function compare() {
+  invalidatePatchResult();
+  useGeneratedButton.disabled = true;
   try {
     fitInput(beforeEditor.value, 'Before');
     fitInput(afterEditor.value, 'After');
@@ -121,10 +139,12 @@ function compare() {
     try {
       latestPatch = createJsonPatch(left, right);
       copyPatchButton.disabled = downloadPatchButton.disabled = false;
+      useGeneratedButton.disabled = false;
       summary.append(cell('span', 'JSON Patch: ' + latestPatch.length + ' operations', 'pill'));
     } catch (patchError) {
       latestPatch = null;
       copyPatchButton.disabled = downloadPatchButton.disabled = true;
+      useGeneratedButton.disabled = true;
       patchStatus = ' Patch unavailable: ' + (patchError.message || 'too many operations') + '.';
       summary.append(cell('span', 'JSON Patch unavailable', 'pill'));
     }
@@ -179,6 +199,7 @@ document.querySelector('#swap').addEventListener('click', () => {
 document.querySelector('#clear').addEventListener('click', () => {
   beforeEditor.value = '';
   afterEditor.value = '';
+  patchSource.value = '';
   resetReport();
   setStatus('Editors cleared.');
   beforeEditor.focus();
@@ -248,5 +269,70 @@ downloadPatchButton.addEventListener('click', () => {
   document.body.append(link);
   link.click();
   link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+
+function patchMessage(message, isError = false) {
+  patchStatus.textContent = message;
+  patchStatus.classList.toggle('error', isError);
+}
+function previewPatch() {
+  invalidatePatchResult();
+  try {
+    fitInput(beforeEditor.value, 'Before');
+    fitInput(patchSource.value, 'Patch');
+    const documentBefore = parseJson(beforeEditor.value, 'Before');
+    const operations = parseJson(patchSource.value, 'JSON Patch');
+    const transformed = applyJsonPatch(documentBefore, operations);
+    const json = JSON.stringify(transformed, null, 2);
+    fitInput(json, 'Resulting document');
+    lastApplied = { beforeSource: beforeEditor.value, json };
+    patchResult.value = json;
+    sendResultButton.disabled = false;
+    downloadResultButton.disabled = false;
+    patchMessage('Patch preview created on a copy of Before. No editor content changed.');
+  } catch (error) {
+    patchMessage(error instanceof Error ? error.message : 'Unable to apply JSON Patch.', true);
+  }
+}
+document.querySelector('#preview-patch').addEventListener('click', previewPatch);
+patchSource.addEventListener('input', () => {
+  invalidatePatchResult();
+  patchMessage('Patch text changed. Preview again before using the result.');
+});
+useGeneratedButton.addEventListener('click', () => {
+  if (!latestPatch) return;
+  patchSource.value = serializeJsonPatch(latestPatch);
+  invalidatePatchResult();
+  patchMessage('Generated patch copied into the patch editor. Select Preview applying patch.');
+});
+sendResultButton.addEventListener('click', () => {
+  if (!lastApplied) return;
+  if (beforeEditor.value !== lastApplied.beforeSource) {
+    invalidatePatchResult();
+    patchMessage('Before changed. Recalculate the preview before using it.', true);
+    return;
+  }
+  if (afterEditor.value.trim() && afterEditor.value !== lastApplied.json &&
+      !confirm('Replace the current After editor with the patch result?')) return;
+  afterEditor.value = lastApplied.json;
+  resetReport();
+  compare();
+  patchMessage('Patch result copied into After and both documents compared.');
+});
+downloadResultButton.addEventListener('click', () => {
+  if (!lastApplied) return;
+  if (beforeEditor.value !== lastApplied.beforeSource) {
+    invalidatePatchResult();
+    patchMessage('Before changed. Recalculate the preview before downloading.', true);
+    return;
+  }
+  const blob = new Blob([lastApplied.json + '\n'], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'patched-result.json';
+  document.body.append(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
