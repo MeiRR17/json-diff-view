@@ -1,4 +1,5 @@
 import { diffJson, parseJson } from './diff.js';
+import { createJsonPatch, serializeJsonPatch } from './patch.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -9,8 +10,11 @@ const status = document.querySelector('#status');
 const summary = document.querySelector('#summary');
 const changeRows = document.querySelector('#changes');
 const copyButton = document.querySelector('#copy');
+const copyPatchButton = document.querySelector('#copy-patch');
+const downloadPatchButton = document.querySelector('#download-patch');
 
 let latestReport = null;
+let latestPatch = null;
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -88,7 +92,9 @@ function renderReport(report) {
 
 function resetReport() {
   latestReport = null;
+  latestPatch = null;
   copyButton.disabled = true;
+  copyPatchButton.disabled = downloadPatchButton.disabled = true;
   summary.hidden = true;
   summary.replaceChildren();
   const row = document.createElement('tr');
@@ -108,11 +114,25 @@ function compare() {
     latestReport = report;
     renderReport(report);
     copyButton.disabled = false;
+
+    // JSON Patch is generated independently of the visual diff. A patch that
+    // exceeds operation limits is never exported incompletely.
+    let patchStatus = '';
+    try {
+      latestPatch = createJsonPatch(left, right);
+      copyPatchButton.disabled = downloadPatchButton.disabled = false;
+      summary.append(cell('span', 'JSON Patch: ' + latestPatch.length + ' operations', 'pill'));
+    } catch (patchError) {
+      latestPatch = null;
+      copyPatchButton.disabled = downloadPatchButton.disabled = true;
+      patchStatus = ' Patch unavailable: ' + (patchError.message || 'too many operations') + '.';
+      summary.append(cell('span', 'JSON Patch unavailable', 'pill'));
+    }
     const count = report.changes.length;
     setStatus(
-      count === 0 ? 'Comparison complete: no differences.' :
+      (count === 0 ? 'Comparison complete: no differences.' :
       'Comparison complete: ' + count + ' difference' + (count === 1 ? '' : 's') +
-      (report.truncated ? ' shown (report truncated).' : '.')
+      (report.truncated ? ' shown (report truncated).' : '.')) + patchStatus
     );
   } catch (error) {
     resetReport();
@@ -204,4 +224,29 @@ copyButton.addEventListener('click', async () => {
   } catch {
     setStatus('Clipboard access failed. Try using HTTPS or a local web server.', true);
   }
+});
+
+copyPatchButton.addEventListener('click', async () => {
+  if (!latestPatch) return;
+  try {
+    await navigator.clipboard.writeText(serializeJsonPatch(latestPatch));
+    setStatus('RFC 6902 JSON Patch copied to clipboard.');
+  } catch {
+    setStatus('Clipboard access failed. Use Download .jsonpatch instead.', true);
+  }
+});
+
+downloadPatchButton.addEventListener('click', () => {
+  if (!latestPatch) return;
+  const blob = new Blob([serializeJsonPatch(latestPatch)], {
+    type: 'application/json;charset=utf-8'
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'changes.jsonpatch';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
