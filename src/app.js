@@ -90,6 +90,10 @@ const snapshotHunkSearchSummary = document.querySelector('#snapshot-hunk-search-
 const snapshotHunkSearchRows = document.querySelector('#snapshot-hunk-search-rows');
 const snapshotHunkSearchJson = document.querySelector('#snapshot-hunk-search-json');
 const snapshotHunkSearchCsv = document.querySelector('#snapshot-hunk-search-csv');
+const snapshotHunkSearchPage = document.querySelector('#snapshot-hunk-search-page');
+const snapshotHunkSearchPrevious = document.querySelector('#snapshot-hunk-search-previous');
+const snapshotHunkSearchNext = document.querySelector('#snapshot-hunk-search-next');
+const snapshotHunkSearchPageInfo = document.querySelector('#snapshot-hunk-search-page-info');
 const snapshotCompareRows = document.querySelector('#snapshot-compare-rows');
 const snapshotCompareJson = document.querySelector('#snapshot-compare-json');
 const snapshotCompareCsv = document.querySelector('#snapshot-compare-csv');
@@ -374,6 +378,7 @@ let latestWorkspaceUndo = null;
 let latestSnapshotComparison = null;
 let latestHunkInspection = null;
 let latestHunkSearch = null;
+let activeHunkSearchHit = null;
 let latestSnapshotStructuralComparison = null;
 // Reserved comparison-only ID: snapshot IDs are numeric strings.
 const CURRENT_WORKSPACE_ENTRY_ID = '@current';
@@ -869,20 +874,29 @@ function clearHunkSearch() {
   snapshotHunkSearchResults.hidden = true;
   snapshotHunkSearchSummary.textContent = '';
   snapshotHunkSearchRows.replaceChildren();
+  snapshotHunkSearchPageInfo.textContent = '';
+  snapshotHunkSearchPage.removeAttribute('max');
+  snapshotHunkSearchPrevious.disabled = true;
+  snapshotHunkSearchNext.disabled = true;
   snapshotHunkSearchJson.disabled = true;
   snapshotHunkSearchCsv.disabled = true;
 }
 function refreshHunkSearchControl() {
+  const query = snapshotHunkSearchQuery.value.trim();
+  const pageText = snapshotHunkSearchPage.value.trim();
+  const page = Number(pageText);
   snapshotHunkSearchRun.disabled = !latestSnapshotComparison ||
-    !snapshotHunkSearchQuery.value.trim() ||
-    snapshotHunkSearchQuery.value.trim().length > 120;
+    !query || query.length > 120 || !pageText ||
+    !Number.isSafeInteger(page) || page < 1;
 }
 snapshotHunkSearchQuery.addEventListener('input', () => {
+  snapshotHunkSearchPage.value = '1';
   clearHunkSearch();
   refreshHunkSearchControl();
 });
 for (const control of [snapshotHunkSearchEditor, snapshotHunkSearchSide]) {
   control.addEventListener('change', () => {
+    snapshotHunkSearchPage.value = '1';
     clearHunkSearch();
     refreshHunkSearchControl();
   });
@@ -894,13 +908,22 @@ function openHunkSearchHit(hit) {
   snapshotHunkIndex.value = String(hit.hunk_index);
   snapshotHunkPage.value = String(hit.hunk_page);
   clearHunkInspection();
+  // The hunk inspection's displayed window is 180 changed rows. A hit
+  // identifies the exact changed row *inside* that window.
+  activeHunkSearchHit = {
+    editor: hit.editor,
+    hunk_index: hit.hunk_index,
+    row_in_hunk: hit.row_in_hunk,
+    from_line: hit.from_line,
+    to_line: hit.to_line
+  };
   refreshHunkInspectionControl();
   openHunkInspection();
-  if (!snapshotHunkInspection.hidden) {
+  if (!snapshotHunkInspection.hidden && !activeHunkSearchHit) {
     snapshotHunkInspection.scrollIntoView({ block: 'nearest' });
   }
 }
-snapshotHunkSearchRun.addEventListener('click', () => {
+function runHunkSearch() {
   if (snapshotHunkSearchRun.disabled || !latestSnapshotComparison ||
       !ensureLiveSnapshotComparisonFresh('raw')) return;
   try {
@@ -909,21 +932,24 @@ snapshotHunkSearchRun.addEventListener('click', () => {
     const second = comparisonWorkspaceEntry(pair.to.id);
     const found = searchChangedSnapshotLines(
       first, second, snapshotHunkSearchQuery.value,
-      snapshotHunkSearchEditor.value, snapshotHunkSearchSide.value);
+      snapshotHunkSearchEditor.value, snapshotHunkSearchSide.value,
+      Number(snapshotHunkSearchPage.value));
     if (!ensureLiveSnapshotComparisonFresh('raw')) return;
     clearHunkSearch();
     latestHunkSearch = found;
     const stats = found.summary;
+    const window = found.window;
     snapshotHunkSearchSummary.textContent =
       stats.matching_rows_in_inspected_scope + ' matching changed rows among ' +
-      stats.inspected_changed_rows + ' scanned; ' +
-      stats.stored_results + ' previews retained' +
-      (stats.omitted_matching_rows ? ', ' +
-        stats.omitted_matching_rows + ' additional matches not shown' : '') +
+      stats.inspected_changed_rows + ' scanned; displaying matches ' +
+      window.first_match_index + '–' + window.last_match_index +
+      ' (' + stats.stored_results + ' previews in this window)' +
+      (stats.matches_outside_current_page ? ', ' +
+        stats.matches_outside_current_page + ' matches on other pages' : '') +
       (stats.incomplete ? '. INCOMPLETE SEARCH: ' +
         stats.uninspected_changed_rows + ' changed rows were not searched.' :
         '. All changed lines in this scope were searched.') +
-      ' Open any result to inspect its exact hunk and page.';
+      ' Open a result to highlight its exact changed row in the hunk inspector.';
     const fragment = document.createDocumentFragment();
     if (!found.results.length) {
       const tr = document.createElement('tr');
@@ -945,7 +971,10 @@ snapshotHunkSearchRun.addEventListener('click', () => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'button subtle';
-      button.textContent = 'Open hunk page';
+      button.textContent = 'Highlight match';
+      button.setAttribute('aria-label',
+        'Open ' + hit.editor_label + ', hunk ' + hit.hunk_index +
+        ', changed row ' + hit.row_in_hunk);
       button.addEventListener('click', () => openHunkSearchHit(hit));
       action.append(button);
       tr.append(action);
@@ -953,14 +982,40 @@ snapshotHunkSearchRun.addEventListener('click', () => {
     }
     snapshotHunkSearchRows.replaceChildren(fragment);
     snapshotHunkSearchResults.hidden = false;
+    snapshotHunkSearchPage.max = String(window.total_pages);
+    snapshotHunkSearchPageInfo.textContent =
+      'Match page ' + window.page + '/' + window.total_pages +
+      ' · ' + window.first_match_index + '–' +
+      window.last_match_index + ' of ' +
+      stats.matching_rows_in_inspected_scope + ' scanned-scope matches';
+    snapshotHunkSearchPrevious.disabled = !window.has_previous_page;
+    snapshotHunkSearchNext.disabled = !window.has_next_page;
     snapshotHunkSearchJson.disabled = false;
     snapshotHunkSearchCsv.disabled = false;
-    snapshotCompareMessage('Changed-line search completed locally. Results contain snippets only.');
+    snapshotCompareMessage('Changed-line match page generated locally; other pages are not retained.');
   } catch (error) {
     clearHunkSearch();
     snapshotCompareMessage('Changed-line search failed: ' +
       (error instanceof Error ? error.message : 'unknown error'), true);
   }
+}
+snapshotHunkSearchRun.addEventListener('click', runHunkSearch);
+snapshotHunkSearchPage.addEventListener('change', () => {
+  clearHunkSearch();
+  refreshHunkSearchControl();
+  if (!snapshotHunkSearchRun.disabled) runHunkSearch();
+});
+snapshotHunkSearchPrevious.addEventListener('click', () => {
+  if (snapshotHunkSearchPrevious.disabled || !latestHunkSearch) return;
+  snapshotHunkSearchPage.value = String(latestHunkSearch.window.page - 1);
+  refreshHunkSearchControl();
+  runHunkSearch();
+});
+snapshotHunkSearchNext.addEventListener('click', () => {
+  if (snapshotHunkSearchNext.disabled || !latestHunkSearch) return;
+  snapshotHunkSearchPage.value = String(latestHunkSearch.window.page + 1);
+  refreshHunkSearchControl();
+  runHunkSearch();
 });
 snapshotHunkSearchJson.addEventListener('click', () => {
   if (!latestHunkSearch || !ensureLiveSnapshotComparisonFresh('raw')) return;
@@ -987,6 +1042,7 @@ snapshotHunkSearchCsv.addEventListener('click', () => {
 
 function clearHunkInspection() {
   latestHunkInspection = null;
+  activeHunkSearchHit = null;
   snapshotHunkInspection.hidden = true;
   snapshotHunkInspectionSummary.textContent = '';
   snapshotHunkInspectionRows.replaceChildren();
@@ -1078,9 +1134,23 @@ function openHunkInspection() {
       ' context lines before and ' + result.context.after_lines_shown +
       ' after. Raw text only; no JSON Patch executed.';
     const fragment = document.createDocumentFragment();
+    let changedRowIndex = 0;
+    let highlightedRow = null;
     for (const line of result.details) {
       const tr = document.createElement('tr');
       tr.className = 'snapshot-line-' + line.change_type;
+      if (line.change_type !== 'context') {
+        const rowInHunk = result.window.first_changed_row + changedRowIndex++;
+        const hit = activeHunkSearchHit;
+        if (hit && hit.editor === result.editor.id &&
+            hit.hunk_index === h.index && hit.row_in_hunk === rowInHunk &&
+            hit.from_line === line.from_line && hit.to_line === line.to_line) {
+          tr.classList.add('snapshot-hunk-search-hit');
+          tr.setAttribute('aria-current', 'true');
+          tr.tabIndex = -1;
+          highlightedRow = tr;
+        }
+      }
       for (const value of [
         line.change_type,
         line.from_line === null ? '—' : String(line.from_line),
@@ -1092,6 +1162,11 @@ function openHunkInspection() {
     }
     snapshotHunkInspectionRows.replaceChildren(fragment);
     snapshotHunkInspection.hidden = false;
+    if (highlightedRow) {
+      highlightedRow.focus({ preventScroll: true });
+      highlightedRow.scrollIntoView({ block: 'center' });
+    }
+    activeHunkSearchHit = null;
     snapshotHunkPage.max = String(result.window.total_pages);
     snapshotHunkPageInfo.textContent =
       'Page ' + result.window.page + ' of ' +

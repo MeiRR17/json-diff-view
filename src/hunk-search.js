@@ -1,6 +1,8 @@
 /**
  * Bounded read-only search across complete changed lines of two workspaces.
  * This inspects opaque editor text, not parsed JSON or executable patches.
+ * Results are paged by matching changed row, with at most 100 retained
+ * snippets. Every page request scans the same bounded changed-line scope.
  */
 import { parseWorkspace } from './workspace.js';
 import { alignRawLineChanges } from './line-diff.js';
@@ -31,7 +33,8 @@ function trimmedRegion(left, right) {
   return { prefix, suffix };
 }
 export function searchChangedSnapshotLines(
-  fromEntry, toEntry, queryText, editorFilter = 'all', sideFilter = 'both'
+  fromEntry, toEntry, queryText, editorFilter = 'all', sideFilter = 'both',
+  matchPage = 1
 ) {
   if (!fromEntry || !toEntry || String(fromEntry.id) === String(toEntry.id) ||
       typeof fromEntry.content !== 'string' || typeof toEntry.content !== 'string') {
@@ -46,6 +49,13 @@ export function searchChangedSnapshotLines(
   }
   if (!['both', 'earlier', 'later'].includes(sideFilter)) {
     throw new TypeError('Unknown search-side filter.');
+  }
+  if (!Number.isSafeInteger(matchPage) || matchPage < 1) {
+    throw new RangeError('Match page must be a positive whole number.');
+  }
+  const matchOffset = (matchPage - 1) * MAX_RESULTS;
+  if (!Number.isSafeInteger(matchOffset)) {
+    throw new RangeError('Match page is outside the supported range.');
   }
   const earlier = parseWorkspace(fromEntry.content);
   const later = parseWorkspace(toEntry.content);
@@ -74,7 +84,9 @@ export function searchChangedSnapshotLines(
       if (!fromMatch && !toMatch) return;
       matched++;
       fieldMatches++;
-      if (results.length >= MAX_RESULTS) return;
+      // Match count spans the scanned scope, but memory holds only the
+      // requested page. Earlier pages are never retained.
+      if (matched <= matchOffset || results.length >= MAX_RESULTS) return;
       results.push({
         editor: field.id, editor_label: field.label,
         change_type: item.change_type, hunk_index: item.hunk_index,
@@ -96,6 +108,11 @@ export function searchChangedSnapshotLines(
       matching_scanned_rows: fieldMatches
     });
   }
+  const totalPages = Math.max(1, Math.ceil(matched / MAX_RESULTS));
+  if (matchPage > totalPages) {
+    throw new RangeError('Match page ' + matchPage + ' does not exist. ' +
+      'There are ' + totalPages + ' pages in the scanned search scope.');
+  }
   return {
     format: 'json-diff-view-changed-line-search', version: 1,
     patch_not_executed: true, read_only: true, preview_only: true,
@@ -103,6 +120,15 @@ export function searchChangedSnapshotLines(
     to: { id: String(toEntry.id), name: String(toEntry.name) },
     query,
     filters: { editor: editorFilter, side: sideFilter },
+    window: {
+      page: matchPage,
+      total_pages: totalPages,
+      page_size: MAX_RESULTS,
+      first_match_index: results.length ? matchOffset + 1 : 0,
+      last_match_index: matchOffset + results.length,
+      has_previous_page: matchPage > 1,
+      has_next_page: matchPage < totalPages
+    },
     summary: {
       inspected_changed_rows: scanned,
       uninspected_changed_rows: skipped,
@@ -110,6 +136,7 @@ export function searchChangedSnapshotLines(
       matching_rows_in_inspected_scope: matched,
       stored_results: results.length,
       omitted_matching_rows: matched - results.length,
+      matches_outside_current_page: matched - results.length,
       maximum_scanned_changed_rows: MAX_SCAN,
       maximum_saved_results: MAX_RESULTS,
       changed_rows_per_hunk_page: PAGE_ROWS,
@@ -131,14 +158,17 @@ export function serializeChangedLineSearchCsv(report) {
     'query','from_workspace','to_workspace','editor','side_scope','match_side',
     'change_type','hunk_index','row_in_hunk','hunk_page','from_line','to_line',
     'from_present','to_present','from_preview','to_preview','incomplete',
-    'uninspected_changed_rows','preview_only'
+    'uninspected_changed_rows','preview_only','match_page','total_match_pages',
+    'first_match_index','last_match_index'
   ]];
   for (const x of report.results) rows.push([
     report.query,report.from.name,report.to.name,x.editor,report.filters.side,
     x.match_side,x.change_type,x.hunk_index,x.row_in_hunk,x.hunk_page,
     x.from_line ?? '',x.to_line ?? '',x.from_present,x.to_present,
     x.from_preview,x.to_preview,report.summary.incomplete,
-    report.summary.uninspected_changed_rows,true
+    report.summary.uninspected_changed_rows,true,
+    report.window.page,report.window.total_pages,
+    report.window.first_match_index,report.window.last_match_index
   ]);
   return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }

@@ -144,7 +144,7 @@
             </div>
             <section class="snapshot-hunk-search" aria-labelledby="snapshot-hunk-search-heading">
               <h4 id="snapshot-hunk-search-heading">Search changed lines across all hunks</h4>
-              <p class="hint">Search complete changed lines, even beyond the current preview. Only bounded snippets and their locations are retained. Search never parses JSON or executes patches.</p>
+              <p class="hint">Search complete changed lines, even beyond the current preview. Page through matching rows and highlight any match at its exact hunk location. Only bounded snippets and locations are retained. Search never parses JSON or executes patches.</p>
               <div class="snapshot-hunk-search-controls">
                 <label for="snapshot-hunk-search-query">Find text</label>
                 <input id="snapshot-hunk-search-query" type="search" maxlength="120" placeholder="Property, error, or value">
@@ -172,13 +172,20 @@
                   </div>
                 </div>
                 <p id="snapshot-hunk-search-summary" class="hint" role="status" aria-live="polite"></p>
+                <div class="snapshot-hunk-search-pages" role="group" aria-label="Navigate search result pages">
+                  <label for="snapshot-hunk-search-page">Match page</label>
+                  <input type="number" id="snapshot-hunk-search-page" value="1" min="1" step="1">
+                  <button type="button" class="button subtle" id="snapshot-hunk-search-previous" disabled>Previous matches</button>
+                  <button type="button" class="button subtle" id="snapshot-hunk-search-next" disabled>Next matches</button>
+                  <span id="snapshot-hunk-search-page-info" role="status" aria-live="polite"></span>
+                </div>
                 <div class="results-scroll">
                   <table class="diff-table">
                     <thead><tr><th scope="col">Editor</th><th scope="col">Change</th><th scope="col">Matched</th><th scope="col">Hunk / page</th><th scope="col">Earlier line</th><th scope="col">Earlier snippet</th><th scope="col">Later line</th><th scope="col">Later snippet</th><th scope="col">Inspect</th></tr></thead>
                     <tbody id="snapshot-hunk-search-rows"></tbody>
                   </table>
                 </div>
-                <p class="hint">At most 200,000 changed rows are searched, 100 matches retained and 240 characters shown per snippet. Search results are labeled incomplete if some changed rows were not examined. Exports contain only bounded previews, not complete drafts.</p>
+                <p class="hint">Each request scans at most 200,000 changed rows and retains only the selected page of up to 100 matches, with 240-character snippets. Other pages are recomputed on demand and are not kept in memory. Search results are labeled incomplete if changed rows remain unexamined. Selecting a match highlights its exact changed row in the hunk inspector. Exports contain the current match page only, not complete drafts.</p>
               </div>
             </section>
             <section class="snapshot-hunk-on-demand" aria-labelledby="snapshot-hunk-inspect-heading">
