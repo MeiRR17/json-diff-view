@@ -41,6 +41,13 @@ const workspaceCollectionExport = document.querySelector('#workspace-collection-
 const workspaceCollectionImport = document.querySelector('#workspace-collection-import');
 const workspaceCollectionFile = document.querySelector('#workspace-collection-file');
 const workspaceCollectionMode = document.querySelector('#workspace-collection-mode');
+const workspaceCollectionPreviewPanel = document.querySelector('#workspace-collection-preview');
+const workspaceCollectionPreviewRows = document.querySelector('#workspace-collection-preview-rows');
+const workspaceCollectionPreviewSummary = document.querySelector('#workspace-collection-preview-summary');
+const workspaceCollectionSelectAll = document.querySelector('#workspace-collection-select-all');
+const workspaceCollectionSelectNone = document.querySelector('#workspace-collection-select-none');
+const workspaceCollectionApply = document.querySelector('#workspace-collection-apply');
+const workspaceCollectionCancel = document.querySelector('#workspace-collection-cancel');
 const workspacePreview = document.querySelector('#workspace-preview');
 const workspacePreviewSummary = document.querySelector('#workspace-preview-summary');
 const workspacePreviewRows = document.querySelector('#workspace-preview-rows');
@@ -291,6 +298,7 @@ let bundleImportSequence = 0;
 let workspaceImportSequence = 0;
 const sessionSnapshots = createSessionSnapshotStore();
 let collectionImportGeneration = 0;
+let stagedCollection = null;
 let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
 let latestInspection = null;
@@ -544,7 +552,7 @@ workspaceSnapshotSave.addEventListener('click', () => {
     const name = workspaceSnapshotName.value.trim() ||
       'Snapshot ' + (sessionSnapshots.usage().count + 1);
     const entry = sessionSnapshots.add(name, contents);
-    collectionImportGeneration++;
+    discardCollectionPreview();
     renderSessionSnapshotControls(entry.id);
     workspaceMessage('Saved “' + entry.name +
       '” in this tab only. Download it to keep it after a reload.');
@@ -596,7 +604,7 @@ workspaceSnapshotDelete.addEventListener('click', () => {
     discardWorkspaceStaging('Deleted the snapshot that was being previewed.');
   }
   sessionSnapshots.remove(entry.id);
-  collectionImportGeneration++;
+  discardCollectionPreview();
   renderSessionSnapshotControls();
   workspaceMessage('Session snapshot deleted. Current editors were not modified.');
 });
@@ -615,14 +623,115 @@ workspaceCollectionExport.addEventListener('click', () => {
       (error instanceof Error ? error.message : 'unknown error'), true);
   }
 });
+function clearCollectionPreview() {
+  stagedCollection = null;
+  workspaceCollectionPreviewPanel.hidden = true;
+  workspaceCollectionPreviewRows.replaceChildren();
+  workspaceCollectionPreviewSummary.textContent = '';
+  workspaceCollectionPreviewSummary.classList.remove('error');
+  workspaceCollectionApply.disabled = true;
+}
+function discardCollectionPreview(message = '') {
+  collectionImportGeneration++;
+  const hadPreview = stagedCollection !== null;
+  clearCollectionPreview();
+  if (hadPreview && message) workspaceMessage(message);
+}
+function selectedCollectionEntries() {
+  const staged = stagedCollection;
+  if (!staged) return [];
+  return staged.entries.filter((entry, index) => staged.checked[index].checked);
+}
+function refreshCollectionPreview() {
+  if (!stagedCollection) return;
+  const selected = selectedCollectionEntries();
+  const existing = sessionSnapshots.list();
+  const replace = workspaceCollectionMode.value === 'replace';
+  const duplicateNames = new Set(existing.map(item => item.name));
+  const collisions = selected.filter(item => duplicateNames.has(item.name)).length;
+  let message = stagedCollection.fileName + ': ' + selected.length +
+    ' of ' + stagedCollection.entries.length + ' snapshots selected. ';
+  if (!selected.length) {
+    message += 'Select at least one entry to import.';
+    workspaceCollectionApply.disabled = true;
+    workspaceCollectionPreviewSummary.classList.add('error');
+  } else {
+    try {
+      const plan = sessionSnapshots.planImport(selected, { replace });
+      message += (replace ? 'Replace ' + existing.length + ' existing snapshots; ' :
+        'Keep ' + existing.length + ' existing snapshots; ') +
+        'result: ' + plan.combinedCount + '/8 snapshots, ' +
+        formatBytes(plan.combinedBytes) + ' of 24 MiB.';
+      if (!replace && collisions) message += ' ' + collisions +
+        ' selected names already exist; they will be added as separate snapshots.';
+      workspaceCollectionApply.disabled = false;
+      workspaceCollectionPreviewSummary.classList.remove('error');
+    } catch (error) {
+      message += (error instanceof Error ? error.message : 'Invalid selection');
+      workspaceCollectionApply.disabled = true;
+      workspaceCollectionPreviewSummary.classList.add('error');
+    }
+  }
+  message += ' No editors will be modified.';
+  workspaceCollectionPreviewSummary.textContent = message;
+}
+function stageCollectionPreview(items, fileName) {
+  clearCollectionPreview();
+  const checked = [];
+  const fragment = document.createDocumentFragment();
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const row = document.createElement('tr');
+    const selectCell = document.createElement('td');
+    const label = document.createElement('label');
+    label.className = 'workspace-collection-entry';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = true;
+    checkbox.setAttribute('aria-label', 'Import snapshot ' + (i + 1) + ': ' + item.name);
+    checkbox.addEventListener('change', refreshCollectionPreview);
+    checked.push(checkbox);
+    label.append(checkbox, document.createTextNode(item.name));
+    selectCell.append(label);
+    const sizeCell = document.createElement('td');
+    sizeCell.textContent = formatBytes(new TextEncoder().encode(item.content).byteLength);
+    const statusCell = document.createElement('td');
+    statusCell.textContent = sessionSnapshots.list().some(x => x.name === item.name) ?
+      'Name already in tab' : 'New name';
+    row.append(selectCell, sizeCell, statusCell);
+    fragment.append(row);
+  }
+  stagedCollection = { entries: items, checked, fileName };
+  workspaceCollectionPreviewRows.replaceChildren(fragment);
+  workspaceCollectionPreviewPanel.hidden = false;
+  refreshCollectionPreview();
+}
 workspaceCollectionImport.addEventListener('click', () => workspaceCollectionFile.click());
-workspaceCollectionMode.addEventListener('change', () => { collectionImportGeneration++; });
+workspaceCollectionMode.addEventListener('change', () => {
+  // Switching the mode while a file is reading supersedes that request.
+  // Once staged, switching Append/Replace recalculates the proposed result.
+  if (stagedCollection) refreshCollectionPreview();
+  else collectionImportGeneration++;
+});
 workspaceCollectionFile.addEventListener('change', event => {
   const file = event.target.files?.[0];
   event.target.value = '';
   if (file) void importSessionCollection(file);
 });
+workspaceCollectionSelectAll.addEventListener('click', () => {
+  if (!stagedCollection) return;
+  for (const box of stagedCollection.checked) box.checked = true;
+  refreshCollectionPreview();
+});
+workspaceCollectionSelectNone.addEventListener('click', () => {
+  if (!stagedCollection) return;
+  for (const box of stagedCollection.checked) box.checked = false;
+  refreshCollectionPreview();
+});
+workspaceCollectionCancel.addEventListener('click', () =>
+  discardCollectionPreview('Collection import canceled; existing snapshots preserved.'));
 async function importSessionCollection(file) {
+  discardCollectionPreview();
   const request = ++collectionImportGeneration;
   const mode = workspaceCollectionMode.value;
   if (file.size > MAX_COLLECTION_BYTES) {
@@ -634,37 +743,59 @@ async function importSessionCollection(file) {
     const text = await file.text();
     if (request !== collectionImportGeneration || mode !== workspaceCollectionMode.value) return;
     const items = parseSnapshotCollection(text);
-    const replace = mode === 'replace';
-    const plan = sessionSnapshots.planImport(items, { replace });
     if (request !== collectionImportGeneration) return;
-    const action = replace ? 'REPLACE all existing session snapshots' :
-      'APPEND to existing session snapshots';
-    if (!confirm('Import ' + items.length + ' named workspace snapshots from “' +
-        file.name + '”? This will ' + action +
-        ', leaving ' + plan.combinedCount + ' snapshots using ' +
-        formatBytes(plan.combinedBytes) + ' in this tab. ' +
-        'This does NOT change editors or run patches. ' +
-        (replace ? 'Replaced in-tab snapshots cannot be recovered unless downloaded.' : ''))) {
-      workspaceMessage('Snapshot collection import canceled. Existing snapshots preserved.');
-      return;
-    }
-    if (request !== collectionImportGeneration || mode !== workspaceCollectionMode.value) return;
-    // One atomic, preflighted in-memory commit; replacement invalidates any
-    // staged preview that refers to a soon-to-be-deleted snapshot ID.
-    const created = sessionSnapshots.addMany(items, { replace });
-    collectionImportGeneration++;
-    if (replace && stagedWorkspace?.sessionSnapshotId) discardWorkspaceStaging(
-      'Session collection replaced; the previous snapshot preview was canceled.');
-    renderSessionSnapshotControls(created[0]?.id ?? '');
-    workspaceMessage('Imported ' + created.length + ' session snapshots (' +
-      (replace ? 'replaced' : 'appended') + '). Editors were not modified. ' +
-      'Download snapshots or their collection to keep them after reload.');
+    stageCollectionPreview(items, file.name);
+    workspaceMessage('Collection ready for review. Choose snapshots to import.');
+    workspaceCollectionPreviewPanel.scrollIntoView({ block: 'nearest' });
   } catch (error) {
     if (request === collectionImportGeneration) workspaceMessage(
-      'Could not import snapshot collection: ' +
+      'Could not open snapshot collection: ' +
       (error instanceof Error ? error.message : 'invalid collection'), true);
   }
 }
+workspaceCollectionApply.addEventListener('click', () => {
+  const staged = stagedCollection;
+  if (!staged) return;
+  const selected = selectedCollectionEntries();
+  const replace = workspaceCollectionMode.value === 'replace';
+  let plan;
+  try {
+    plan = sessionSnapshots.planImport(selected, { replace });
+  } catch (error) {
+    refreshCollectionPreview();
+    workspaceMessage('Snapshot selection cannot be imported: ' +
+      (error instanceof Error ? error.message : 'invalid selection'), true);
+    return;
+  }
+  if (!confirm('Import ' + selected.length + ' of ' + staged.entries.length +
+      ' snapshots from “' + staged.fileName + '”? ' +
+      (replace ? 'REPLACE the existing in-tab snapshots' :
+        'APPEND to the existing in-tab snapshots') + ', resulting in ' +
+      plan.combinedCount + ' snapshots using ' +
+      formatBytes(plan.combinedBytes) + '. ' +
+      (replace ? 'Existing snapshots will be lost unless downloaded. ' : '') +
+      'No editor or JSON Patch will be changed or executed.')) {
+    workspaceMessage('Collection import not applied. Edit the selection or cancel.');
+    return;
+  }
+  if (staged !== stagedCollection) return;
+  try {
+    // Recheck all capacity constraints immediately before the atomic
+    // mutation; no editor contents or imported patch programs are touched.
+    const created = sessionSnapshots.addMany(selected, { replace });
+    discardCollectionPreview();
+    if (replace && stagedWorkspace?.sessionSnapshotId) discardWorkspaceStaging(
+      'Session collection replaced; previous snapshot preview canceled.');
+    renderSessionSnapshotControls(created[0]?.id ?? '');
+    workspaceMessage('Imported ' + created.length + ' selected snapshots (' +
+      (replace ? 'replaced' : 'appended') + '). Editors unchanged. ' +
+      'Download your collection to keep it after a reload.');
+  } catch (error) {
+    refreshCollectionPreview();
+    workspaceMessage('Collection import failed without changing snapshots: ' +
+      (error instanceof Error ? error.message : 'invalid selection'), true);
+  }
+});
 renderSessionSnapshotControls();
 
 function stagedWorkspaceIsCurrent(staged) {

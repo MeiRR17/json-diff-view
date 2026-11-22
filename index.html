@@ -90,7 +90,26 @@
           <button class="button subtle" type="button" id="workspace-collection-import">↑ Open snapshot collection</button>
           <input id="workspace-collection-file" type="file" accept=".json,application/json" hidden>
         </div>
-        <p class="hint">Collection import requires confirmation and changes only the in-tab snapshot list, never the current editors. Append respects the 8-snapshot / 24 MiB memory limit; Replace discards existing in-tab snapshots. The file is bounded at 32 MiB.</p>
+        <p class="hint">Review and select individual entries after opening a collection. Append keeps existing snapshots; Replace discards them only after confirmation. The 8-snapshot / 24 MiB memory limit remains enforced, with a 32 MiB input file limit.</p>
+        <section class="workspace-collection-preview" id="workspace-collection-preview" aria-labelledby="workspace-collection-preview-heading" hidden>
+          <h3 id="workspace-collection-preview-heading">Review snapshot collection import</h3>
+          <p class="hint">Choose which named workspaces to import. Existing editor drafts and patches are never read or changed by this operation.</p>
+          <div class="workspace-collection-selection-actions">
+            <button class="button subtle" type="button" id="workspace-collection-select-all">Select all</button>
+            <button class="button subtle" type="button" id="workspace-collection-select-none">Select none</button>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">Import / snapshot</th><th scope="col">Workspace size</th><th scope="col">Name</th></tr></thead>
+              <tbody id="workspace-collection-preview-rows"></tbody>
+            </table>
+          </div>
+          <p class="hint" id="workspace-collection-preview-summary" role="status" aria-live="polite"></p>
+          <div class="workspace-collection-selection-actions">
+            <button class="button primary" type="button" id="workspace-collection-apply" disabled>Import selected snapshots</button>
+            <button class="button subtle" type="button" id="workspace-collection-cancel">Cancel import</button>
+          </div>
+        </section>
       </section>
       <section class="workspace-preview" id="workspace-preview" aria-labelledby="workspace-preview-heading" hidden>
         <h2 id="workspace-preview-heading">Review workspace restore</h2>

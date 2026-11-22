@@ -456,3 +456,16 @@ a{color:#155a98}
 .workspace-collection-actions select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.workspace-collection-actions>*{flex:1 1 155px}.workspace-collection-actions label{flex:1 1 100%}}
 @media(prefers-color-scheme:dark){.workspace-collection-actions{border-color:#3b5068}.workspace-collection-actions label{color:#b6cce3}.workspace-collection-actions select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Non-destructive selection and capacity preview for collection imports. */
+.workspace-collection-preview{margin:15px 0;padding:15px 0 2px;border-top:1px solid #d8e1ed}
+.workspace-collection-preview h3{font-size:.96rem;margin:0 0 9px}
+.workspace-collection-preview .hint{overflow-wrap:anywhere}
+.workspace-collection-selection-actions{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0}
+.workspace-collection-entry{display:flex;align-items:center;gap:9px;font-size:.86rem;overflow-wrap:anywhere}
+.workspace-collection-entry input{flex:none;accent-color:#1976bb}
+.workspace-collection-preview td{overflow-wrap:anywhere}
+#workspace-collection-preview-summary{font-weight:650;font-size:.85rem}
+#workspace-collection-preview-summary.error{color:#923d22}
+@media(max-width:700px){.workspace-collection-selection-actions .button{flex:1 1 145px}}
+@media(prefers-color-scheme:dark){.workspace-collection-preview{border-color:#3b5068}#workspace-collection-preview-summary.error{color:#ffb6a0}}
