@@ -294,3 +294,10 @@ a{color:#155a98}
 .evidence-compare-filters input:focus-visible,.evidence-compare-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.evidence-compare-inputs{grid-template-columns:1fr}.evidence-compare-inputs .button{grid-column:auto;width:100%}.evidence-comparison-workspace .result-actions{width:100%;justify-content:flex-start}.evidence-compare-filters label{width:100%}.evidence-compare-filters select{flex:1 1 160px}}
 @media(prefers-color-scheme:dark){.evidence-comparison-workspace{border-color:#3b5068}.evidence-compare-inputs label,.evidence-compare-filters label,.evidence-comparison-summary{color:#b6cce3}.evidence-compare-filters input,.evidence-compare-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Scope-specific evidence drift assessment, without implying live verification. */
+.evidence-assessment{font-weight:700;font-size:.93rem;margin:13px 0 7px;line-height:1.5;color:#304d6d;overflow-wrap:anywhere}
+.evidence-assessment-details{font-size:.84rem;line-height:1.5;margin:4px 0 14px;color:#3d5471;overflow-wrap:anywhere}
+.evidence-compare-filters select#evidence-comparison-scope{flex:0 1 185px}
+@media(max-width:700px){.evidence-compare-filters select#evidence-comparison-scope{flex:1 1 160px}}
+@media(prefers-color-scheme:dark){.evidence-assessment{color:#e4ecf7}.evidence-assessment-details{color:#b6cce3}}

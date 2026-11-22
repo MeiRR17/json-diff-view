@@ -165,7 +165,7 @@
       </section>
       <section class="evidence-comparison-workspace" aria-labelledby="evidence-compare-heading">
         <h3 id="evidence-compare-heading">Compare saved verification evidence</h3>
-        <p class="hint">Compare two offline evidence files to locate changes in the stored failure metadata, verdicts and checkpoint differences. This examines archived claims only; it does not replay a patch or verify either file's origin.</p>
+        <p class="hint">Compare two offline evidence files to locate changes in the stored failure metadata, verdicts and checkpoint differences. A descriptive drift assessment distinguishes newly reproduced failures, failures no longer reproduced and changed checkpoint evidence. This examines archived claims only; it does not replay a patch or verify either file's origin.</p>
         <div class="evidence-compare-inputs">
           <label for="evidence-baseline-file">Baseline evidence (earlier)</label>
           <input id="evidence-baseline-file" type="file" accept=".json,application/json">
@@ -183,6 +183,8 @@
               <button class="button subtle" type="button" id="download-evidence-comparison-csv" disabled>↓ Comparison CSV</button>
             </div>
           </div>
+          <p class="evidence-assessment" id="evidence-assessment" role="status" aria-live="polite"></p>
+          <p class="evidence-assessment-details" id="evidence-assessment-details"></p>
           <p class="evidence-comparison-summary" id="evidence-comparison-summary" role="status" aria-live="polite"></p>
           <div class="evidence-compare-filters" role="group" aria-label="Filter differences between saved evidence">
             <label for="evidence-comparison-path">Report path contains</label>
@@ -193,6 +195,14 @@
               <option value="added">Added</option>
               <option value="removed">Removed</option>
               <option value="changed">Changed</option>
+            </select>
+            <label for="evidence-comparison-scope">Area</label>
+            <select id="evidence-comparison-scope">
+              <option value="all">All areas</option>
+              <option value="metadata">Failure metadata</option>
+              <option value="findings">Reproduction findings</option>
+              <option value="checkpoint">Checkpoint differences</option>
+              <option value="other">Other changes</option>
             </select>
           </div>
           <div class="results-scroll">

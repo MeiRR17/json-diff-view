@@ -7,7 +7,7 @@ import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
 import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
-import { compareVerificationArchives } from './evidence-compare.js';
+import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -165,6 +165,9 @@ const evidenceCompareSummary = document.querySelector('#evidence-comparison-summ
 const evidenceCompareRows = document.querySelector('#evidence-comparison-rows');
 const evidenceComparePath = document.querySelector('#evidence-comparison-path');
 const evidenceCompareType = document.querySelector('#evidence-comparison-type');
+const evidenceCompareScope = document.querySelector('#evidence-comparison-scope');
+const evidenceAssessment = document.querySelector('#evidence-assessment');
+const evidenceAssessmentDetails = document.querySelector('#evidence-assessment-details');
 const evidenceCompareNav = document.querySelector('#evidence-comparison-nav');
 const evidenceComparePrevious = document.querySelector('#evidence-comparison-previous');
 const evidenceCompareNext = document.querySelector('#evidence-comparison-next');
@@ -1252,6 +1255,9 @@ function invalidateEvidenceComparison() {
   evidenceCompareNav.hidden = true;
   evidenceComparePath.value = '';
   evidenceCompareType.value = 'all';
+  evidenceCompareScope.value = 'all';
+  evidenceAssessment.textContent = '';
+  evidenceAssessmentDetails.textContent = '';
   copyEvidenceCompareButton.disabled = true;
   downloadEvidenceCompareJsonButton.disabled = true;
   downloadEvidenceCompareCsvButton.disabled = true;
@@ -1262,8 +1268,10 @@ function renderEvidenceComparison() {
     latestEvidenceComparison;
   const needle = evidenceComparePath.value.trim().toLocaleLowerCase();
   const type = evidenceCompareType.value;
+  const scope = evidenceCompareScope.value;
   const matching = report.changes.filter(change =>
     (type === 'all' || change.type === type) &&
+    (scope === 'all' || evidenceChangeScope(change.path) === scope) &&
     (!needle || change.path.toLocaleLowerCase().includes(needle))
   );
   const pages = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
@@ -1271,6 +1279,19 @@ function renderEvidenceComparison() {
   const offset = evidenceComparisonPage * PAGE_SIZE;
   const shown = matching.slice(offset, offset + PAGE_SIZE);
   evidenceComparePanel.hidden = false;
+  const assessment = latestEvidenceComparison.assessment;
+  evidenceAssessment.textContent = assessment.classification.replaceAll('-', ' ').toUpperCase() +
+    ' — ' + assessment.headline;
+  evidenceAssessmentDetails.textContent =
+    'Recorded difference areas: metadata ' + assessment.recordedChanges.metadata +
+    ', failure checks ' + assessment.recordedChanges.findings +
+    ', checkpoint ' + assessment.recordedChanges.checkpoint +
+    ', other ' + assessment.recordedChanges.other + '.' +
+    (assessment.changedFindingPaths.length ?
+      ' Changed check paths: ' + assessment.changedFindingPaths.join(', ') + '.' : '') +
+    (assessment.truncated ?
+      ' This assessment covers a truncated set of recorded differences.' : '') +
+    ' Findings come from saved evidence; neither archive has been reverified.';
   evidenceCompareSummary.textContent =
     'ARCHIVED EVIDENCE ONLY — NOT REVERIFIED. ' +
     (sameCase ? 'Same recorded failure identity.' :
@@ -1320,6 +1341,7 @@ function evidenceComparisonJson(snapshot) {
     version: 1,
     archived_not_reverified: true,
     same_failure_identity: snapshot.sameCase,
+    drift_assessment: snapshot.assessment,
     baseline: {
       metadata: snapshot.baseline,
       reproduced_claim: snapshot.baselineReproduced
@@ -1384,6 +1406,10 @@ evidenceCompareType.addEventListener('change', () => {
   evidenceComparisonPage = 0;
   renderEvidenceComparison();
 });
+evidenceCompareScope.addEventListener('change', () => {
+  evidenceComparisonPage = 0;
+  renderEvidenceComparison();
+});
 evidenceComparePrevious.addEventListener('click', () => {
   if (!currentEvidenceComparison() || evidenceComparisonPage === 0) return;
   evidenceComparisonPage--;
@@ -1415,7 +1441,8 @@ function exportEvidenceComparison(format) {
   try {
     const csv = format === 'csv';
     const text = csv ? serializeReportCsv(result.report, {
-      source: 'Archived evidence baseline → candidate (not reverified)'
+      source: 'Archived evidence baseline → candidate (not reverified)' +
+        ' [drift: ' + result.assessment.classification + ']'
     }) : evidenceComparisonJson(result);
     downloadReport(text, 'saved-evidence-comparison.' + format,
       csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
