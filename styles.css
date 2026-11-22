@@ -469,3 +469,11 @@ a{color:#155a98}
 #workspace-collection-preview-summary.error{color:#923d22}
 @media(max-width:700px){.workspace-collection-selection-actions .button{flex:1 1 145px}}
 @media(prefers-color-scheme:dark){.workspace-collection-preview{border-color:#3b5068}#workspace-collection-preview-summary.error{color:#ffb6a0}}
+
+/* Rename and re-capture existing in-tab snapshots without allocating slots. */
+.workspace-snapshot-edit{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:9px;align-items:center;padding:10px 0 2px;border-top:1px solid #d8e1ed}
+.workspace-snapshot-edit label{flex:0 0 145px;font-size:.84rem;font-weight:650}
+.workspace-snapshot-edit input{flex:1 1 160px;width:auto;min-width:0}
+.workspace-snapshot-edit .button{flex:0 0 auto;font-size:.82rem}
+@media(max-width:700px){.workspace-snapshot-edit>*{flex:1 1 100%!important}}
+@media(prefers-color-scheme:dark){.workspace-snapshot-edit{border-color:#3b5068}}

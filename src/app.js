@@ -36,6 +36,9 @@ const workspaceSnapshotSelect = document.querySelector('#workspace-snapshot-sele
 const workspaceSnapshotPreview = document.querySelector('#workspace-snapshot-preview');
 const workspaceSnapshotDownload = document.querySelector('#workspace-snapshot-download');
 const workspaceSnapshotDelete = document.querySelector('#workspace-snapshot-delete');
+const workspaceSnapshotRenameName = document.querySelector('#workspace-snapshot-rename-name');
+const workspaceSnapshotRename = document.querySelector('#workspace-snapshot-rename');
+const workspaceSnapshotRecapture = document.querySelector('#workspace-snapshot-recapture');
 const workspaceSnapshotSummary = document.querySelector('#workspace-snapshot-summary');
 const workspaceCollectionExport = document.querySelector('#workspace-collection-export');
 const workspaceCollectionImport = document.querySelector('#workspace-collection-import');
@@ -537,6 +540,11 @@ function renderSessionSnapshotControls(preferredId = '') {
   workspaceSnapshotPreview.disabled = !selected;
   workspaceSnapshotDownload.disabled = !selected;
   workspaceSnapshotDelete.disabled = !selected;
+  workspaceSnapshotRename.disabled = !selected;
+  workspaceSnapshotRenameName.disabled = !selected;
+  workspaceSnapshotRecapture.disabled = !selected;
+  workspaceSnapshotRenameName.value = selected ?
+    selectedSessionSnapshot().name : '';
   const usage = sessionSnapshots.usage();
   workspaceSnapshotSave.disabled = usage.count >= usage.maxCount;
   workspaceCollectionExport.disabled = usage.count === 0;
@@ -558,6 +566,87 @@ workspaceSnapshotSave.addEventListener('click', () => {
       '” in this tab only. Download it to keep it after a reload.');
   } catch (error) {
     workspaceMessage('Could not save session snapshot: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+workspaceSnapshotRename.addEventListener('click', () => {
+  const entry = selectedSessionSnapshot();
+  if (!entry) return;
+  const proposed = workspaceSnapshotRenameName.value.trim();
+  if (proposed === entry.name) {
+    workspaceMessage('Snapshot already has that name. No change made.');
+    return;
+  }
+  if (!proposed) {
+    workspaceMessage('Enter a nonempty name for the selected snapshot.', true);
+    return;
+  }
+  if (!confirm('Rename the in-tab snapshot “' + entry.name + '” to “' +
+      proposed + '”? The stored editor content will not change.')) return;
+  try {
+    const result = sessionSnapshots.rename(entry.id, proposed, entry.name);
+    if (result.changed) {
+      // Existing import previews can show original names and are no longer
+      // current. A staged restore of this point also carries its old label.
+      discardCollectionPreview();
+      if (stagedWorkspace?.sessionSnapshotId === entry.id) {
+        discardWorkspaceStaging('Saved snapshot renamed; reopen its restore preview.');
+      }
+      renderSessionSnapshotControls(entry.id);
+    }
+    workspaceMessage('Snapshot renamed to “' + result.name +
+      '”. Its contents and stable in-tab identity are unchanged.');
+  } catch (error) {
+    workspaceMessage('Could not rename snapshot: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+workspaceSnapshotRecapture.addEventListener('click', () => {
+  const entry = selectedSessionSnapshot();
+  if (!entry) return;
+  let contents;
+  try {
+    contents = serializeWorkspace(currentWorkspaceValues());
+    if (contents === entry.content) {
+      workspaceMessage('Selected snapshot already matches the current workspace.');
+      return;
+    }
+    // Preflight aggregate memory before asking permission and writing data.
+    const projected = sessionSnapshots.usage().bytes -
+      entry.bytes + new TextEncoder().encode(contents).byteLength;
+    if (projected > sessionSnapshots.usage().maxBytes) {
+      throw new RangeError('Updating this snapshot would exceed 24 MiB. ' +
+        'Reduce document size or delete another snapshot.');
+    }
+  } catch (error) {
+    workspaceMessage('Could not prepare snapshot update: ' +
+      (error instanceof Error ? error.message : 'invalid workspace'), true);
+    return;
+  }
+  if (!confirm('Replace the saved contents of “' + entry.name +
+      '” with the current Before, After, Patch and settings? ' +
+      'This overwrites the in-tab snapshot, NOT your current editors. ' +
+      'Download the old snapshot first if you need to retain it.')) return;
+  try {
+    // An unrelated import or programmatic change may have occurred during a
+    // native confirmation; avoid overwriting with an obsolete capture.
+    if (selectedSessionSnapshot()?.id !== entry.id ||
+        serializeWorkspace(currentWorkspaceValues()) !== contents) {
+      workspaceMessage('Current selection or editor contents changed. Update canceled.', true);
+      return;
+    }
+    const result = sessionSnapshots.replaceContent(entry.id, contents, entry.content);
+    if (result.changed) {
+      discardCollectionPreview();
+      if (stagedWorkspace?.sessionSnapshotId === entry.id) {
+        discardWorkspaceStaging('Saved snapshot updated; reopen its restore preview.');
+      }
+      renderSessionSnapshotControls(entry.id);
+    }
+    workspaceMessage('Updated “' + result.name +
+      '” from the current editor drafts. Editors unchanged; no patch executed.');
+  } catch (error) {
+    workspaceMessage('Could not update snapshot: ' +
       (error instanceof Error ? error.message : 'unknown error'), true);
   }
 });

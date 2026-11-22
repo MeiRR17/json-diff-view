@@ -63,7 +63,7 @@
         <div class="section-heading">
           <h2 id="workspace-snapshots-heading">Manual session snapshots</h2>
         </div>
-        <p class="hint">Keep several named editing states in memory for this tab. No autosave, server upload or persistent browser storage. Saved snapshots disappear on reload unless downloaded as workspace files.</p>
+        <p class="hint">Keep several named editing states in memory for this tab. No autosave, server upload or persistent browser storage. Saved snapshots disappear on reload unless downloaded as workspace files. Rename an existing point or update its stored contents without increasing the number of snapshots. Updating requires confirmation and cannot modify the current editors.</p>
         <div class="workspace-snapshot-controls">
           <label for="workspace-snapshot-name">Snapshot name</label>
           <input id="workspace-snapshot-name" type="text" maxlength="80"
@@ -77,6 +77,13 @@
             <button class="button subtle" type="button" id="workspace-snapshot-preview" disabled>Preview restore</button>
             <button class="button subtle" type="button" id="workspace-snapshot-download" disabled>↓ Download snapshot</button>
             <button class="button subtle" type="button" id="workspace-snapshot-delete" disabled>Delete snapshot</button>
+          </div>
+          <div class="workspace-snapshot-edit">
+            <label for="workspace-snapshot-rename-name">Selected snapshot name</label>
+            <input type="text" id="workspace-snapshot-rename-name" maxlength="80" disabled
+              placeholder="Select a snapshot above">
+            <button class="button subtle" type="button" id="workspace-snapshot-rename" disabled>Rename selected</button>
+            <button class="button subtle" type="button" id="workspace-snapshot-recapture" disabled>Update selected from editors</button>
           </div>
         </div>
         <p class="hint" id="workspace-snapshot-summary" role="status" aria-live="polite">No manual session snapshots yet.</p>

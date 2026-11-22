@@ -82,6 +82,48 @@ export function createSessionSnapshotStore() {
   function add(name, content) {
     return addMany([{ name, content }])[0];
   }
+  /**
+   * Update the visible name in place without changing snapshot identity or
+   * data size. An expected prior name protects against stale UI operations.
+   */
+  function rename(id, newName, expectedName) {
+    const entry = read(id);
+    if (!entry) throw new RangeError('Selected snapshot no longer exists.');
+    if (entry.name !== expectedName) {
+      throw new Error('Snapshot name changed; select it again before renaming.');
+    }
+    const prepared = prepareEntry(newName, entry.content);
+    if (prepared.name === entry.name) {
+      return { id: entry.id, name: entry.name, bytes: entry.bytes, changed: false };
+    }
+    entry.name = prepared.name;
+    return { id: entry.id, name: entry.name, bytes: entry.bytes, changed: true };
+  }
+  /**
+   * Re-capture a stored point from new serialized workspace contents.
+   * Validate size and aggregate capacity before mutating either bytes or
+   * content. A captured expected value prevents stale overwrites.
+   */
+  function replaceContent(id, newContent, expectedContent) {
+    const entry = read(id);
+    if (!entry) throw new RangeError('Selected snapshot no longer exists.');
+    if (entry.content !== expectedContent) {
+      throw new Error('Snapshot changed since selection; reopen it before updating.');
+    }
+    const prepared = prepareEntry(entry.name, newContent);
+    if (prepared.content === entry.content) {
+      return { id: entry.id, name: entry.name, bytes: entry.bytes, changed: false };
+    }
+    const projected = totalBytes - entry.bytes + prepared.bytes;
+    if (projected > MAX_SESSION_SNAPSHOT_BYTES) {
+      throw new RangeError('Updating this snapshot would exceed 24 MiB. ' +
+        'Delete older snapshots or reduce editor contents first.');
+    }
+    totalBytes = projected;
+    entry.content = prepared.content;
+    entry.bytes = prepared.bytes;
+    return { id: entry.id, name: entry.name, bytes: entry.bytes, changed: true };
+  }
   function remove(id) {
     const entry = entries.get(String(id));
     if (!entry) return false;
@@ -93,5 +135,5 @@ export function createSessionSnapshotStore() {
     return { count: entries.size, bytes: totalBytes,
       maxCount: MAX_SESSION_SNAPSHOTS, maxBytes: MAX_SESSION_SNAPSHOT_BYTES };
   }
-  return { list, read, add, addMany, planImport, remove, usage };
+  return { list, read, add, addMany, planImport, rename, replaceContent, remove, usage };
 }
