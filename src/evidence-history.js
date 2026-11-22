@@ -176,6 +176,64 @@ function inventoryFailureCases(parsed, archives) {
   return { cases, runs, membership };
 }
 
+
+/**
+ * Compare consecutive recorded *occurrences* of each failure identity rather
+ * than adjacent files in the global archive history. Intervening snapshots
+ * belong to other cases and are never treated as part of this case's history.
+ *
+ * The result contains only descriptive, bounded transition summaries, not
+ * executable JSON Patch operations or claims of authenticated provenance.
+ */
+function buildCaseProgressions(groups, archives) {
+  return groups.map(group => {
+    const comparisons = [];
+    const classifications = Object.create(null);
+    let skippedOtherCases = 0;
+    let truncatedComparisons = 0;
+    for (let position = 1; position < group.snapshot_indexes.length; position++) {
+      const fromNumber = group.snapshot_indexes[position - 1];
+      const toNumber = group.snapshot_indexes[position];
+      const result = compareVerificationArchives(
+        archives[fromNumber - 1].text, archives[toNumber - 1].text);
+      const assessment = result.assessment;
+      // Both snapshots carry the same canonical identity by construction.
+      // Refuse to mislabel a case progression if this invariant is broken.
+      if (!assessment.sameCase) {
+        throw new TypeError('Case progression contained different failure identities.');
+      }
+      const between = toNumber - fromNumber - 1;
+      skippedOtherCases += between;
+      if (assessment.truncated) truncatedComparisons++;
+      classifications[assessment.classification] =
+        (classifications[assessment.classification] || 0) + 1;
+      comparisons.push({
+        from_snapshot_index: fromNumber,
+        to_snapshot_index: toNumber,
+        from_file: archives[fromNumber - 1].name,
+        to_file: archives[toNumber - 1].name,
+        intervening_other_case_snapshots: between,
+        from_reproduced_claim: result.baselineReproduced,
+        to_reproduced_claim: result.candidateReproduced,
+        classification: assessment.classification,
+        explanation: assessment.headline,
+        recorded_differences: result.report.changes.length,
+        report_truncated: assessment.truncated,
+        changed_areas: assessment.recordedChanges
+      });
+    }
+    return {
+      case_id: group.id,
+      snapshots: group.snapshots,
+      comparisons_count: comparisons.length,
+      separated_runs: group.contiguous_runs,
+      intervening_other_case_snapshots: skippedOtherCases,
+      truncated_comparisons: truncatedComparisons,
+      classifications,
+      comparisons
+    };
+  });
+}
 export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
   if (mode !== 'adjacent' && mode !== 'baseline') {
     throw new TypeError('History mode must be adjacent or baseline.');
@@ -264,6 +322,7 @@ export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
     transitions,
     cases: inventory.cases,
     case_runs: inventory.runs,
+    case_progressions: buildCaseProgressions(inventory.cases, archives),
     hotspots: summarizeHotspots(hotspotAccumulator)
   };
 }
@@ -345,4 +404,36 @@ export function serializeEvidenceCasesCsv(history) {
     ]);
   }
   return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
+/**
+ * Export all summaries for one case progression. Spreadsheet cells are
+ * escaped by the same formula-safe CSV quoting as the history exports.
+ */
+export function serializeEvidenceCaseProgressionCsv(history, selected) {
+  if (!history || !selected ||
+      !history.case_progressions?.includes(selected)) {
+    throw new TypeError('Select a case progression from the current history.');
+  }
+  const lines = [[
+    'case_id', 'from_snapshot_index', 'to_snapshot_index',
+    'from_file', 'to_file', 'intervening_other_case_snapshots',
+    'from_reproduced_claim', 'to_reproduced_claim', 'classification',
+    'recorded_differences', 'report_truncated', 'metadata_changes',
+    'finding_changes', 'checkpoint_changes', 'other_changes',
+    'history_comparison_mode', 'archived_not_reverified'
+  ]];
+  for (const item of selected.comparisons) {
+    lines.push([
+      selected.case_id, item.from_snapshot_index, item.to_snapshot_index,
+      item.from_file, item.to_file, item.intervening_other_case_snapshots,
+      item.from_reproduced_claim, item.to_reproduced_claim,
+      item.classification, item.recorded_differences, item.report_truncated,
+      item.changed_areas.metadata, item.changed_areas.findings,
+      item.changed_areas.checkpoint, item.changed_areas.other,
+      history.comparison_mode, 'true'
+    ]);
+  }
+  return '\uFEFF' + lines.map(cells =>
+    cells.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }

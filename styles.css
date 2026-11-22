@@ -387,3 +387,14 @@ a{color:#155a98}
 #evidence-history-case-filter:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.evidence-case-inventory .section-heading .button{flex:1 1 140px}#evidence-history-case-filter{flex:1 1 160px}}
 @media(prefers-color-scheme:dark){.evidence-case-inventory{border-color:#3b5068}#evidence-history-cases-summary{color:#b6cce3}#evidence-history-case-filter{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* History of consecutive appearances of the same recorded failure identity. */
+.evidence-case-progression{border-top:1px solid #d8e1ed;padding:17px 0 0;margin:20px 0 0}
+.evidence-case-progression .section-heading{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.evidence-case-progression h5{font-size:.9rem;margin:0}
+.evidence-case-progression .hint{overflow-wrap:anywhere}
+#evidence-case-progression-summary{font-size:.85rem;font-weight:650;color:#3d5471;overflow-wrap:anywhere}
+.evidence-case-progression td{overflow-wrap:anywhere}
+.evidence-case-progression td .button{font-size:.8rem;white-space:nowrap}
+@media(max-width:700px){.evidence-case-progression .section-heading .button{width:100%}}
+@media(prefers-color-scheme:dark){.evidence-case-progression{border-color:#3b5068}#evidence-case-progression-summary{color:#b6cce3}}

@@ -282,7 +282,7 @@
               <h4 id="evidence-history-cases-heading">Recorded failure identities</h4>
               <button class="button subtle" id="download-evidence-cases-csv" type="button" disabled>↓ Cases CSV</button>
             </div>
-            <p class="hint">Groups snapshots by the source and failed operation index/type/path/from; a case may reappear after other cases. Focus history includes comparisons touching that case, with cross-case boundaries clearly labeled. First vs last inspects the earliest and latest saved snapshots of that same identity, even when separated by other cases.</p>
+            <p class="hint">Groups snapshots by the source and failed operation index/type/path/from; a case may reappear after other cases. Focus history includes comparisons touching that case, with cross-case boundaries clearly labeled. First vs last inspects the earliest and latest saved snapshots of that same identity, even when separated by other cases. View case progression compares every pair of consecutive appearances of that identity and shows any intervening other-case files.</p>
             <p id="evidence-history-cases-summary" role="status" aria-live="polite"></p>
             <div class="results-scroll">
               <table class="diff-table">
@@ -290,6 +290,20 @@
                 <tbody id="evidence-history-cases-rows"></tbody>
               </table>
             </div>
+            <section class="evidence-case-progression" id="evidence-case-progression" aria-labelledby="evidence-case-progression-heading" hidden>
+              <div class="section-heading">
+                <h5 id="evidence-case-progression-heading">Selected failure case progression</h5>
+                <button class="button subtle" id="download-evidence-case-progression-csv" type="button" disabled>↓ Case progression CSV</button>
+              </div>
+              <p class="hint">Connects consecutive appearances of the same recorded failed-operation identity, even when other failures appear between them. Unlike the main history mode, each comparison is within one case. These are archived claims, not independently verified executions.</p>
+              <p id="evidence-case-progression-summary" role="status" aria-live="polite"></p>
+              <div class="results-scroll">
+                <table class="diff-table">
+                  <thead><tr><th scope="col">Earlier case file</th><th scope="col">Later case file</th><th scope="col">Other-case files between</th><th scope="col">Recorded drift</th><th scope="col">Reproduction status</th><th scope="col">Changes</th><th scope="col">Inspect</th></tr></thead>
+                  <tbody id="evidence-case-progression-rows"></tbody>
+                </table>
+              </div>
+            </section>
           </section>
           <section class="evidence-hotspots" id="evidence-history-hotspots" aria-labelledby="evidence-hotspots-heading" hidden>
             <div class="section-heading">

@@ -10,7 +10,8 @@ import { serializeVerificationEvidence, parseVerificationEvidence } from './evid
 import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
 import {
   buildEvidenceHistory, serializeEvidenceHistoryJson, serializeEvidenceHistoryCsv,
-  serializeEvidenceHotspotTimelineCsv, serializeEvidenceCasesCsv
+  serializeEvidenceHotspotTimelineCsv, serializeEvidenceCasesCsv,
+  serializeEvidenceCaseProgressionCsv
 } from './evidence-history.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -191,6 +192,10 @@ const evidenceHistoryCasesPanel = document.querySelector('#evidence-history-case
 const evidenceHistoryCasesSummary = document.querySelector('#evidence-history-cases-summary');
 const evidenceHistoryCasesRows = document.querySelector('#evidence-history-cases-rows');
 const evidenceHistoryCasesCsvButton = document.querySelector('#download-evidence-cases-csv');
+const evidenceCaseProgressionPanel = document.querySelector('#evidence-case-progression');
+const evidenceCaseProgressionSummary = document.querySelector('#evidence-case-progression-summary');
+const evidenceCaseProgressionRows = document.querySelector('#evidence-case-progression-rows');
+const evidenceCaseProgressionCsvButton = document.querySelector('#download-evidence-case-progression-csv');
 const evidenceHistoryMode = document.querySelector('#evidence-history-mode');
 const evidenceHistoryTableTitle = document.querySelector('#evidence-history-table-title');
 const evidenceHistoryCustomFrom = document.querySelector('#evidence-history-custom-from');
@@ -226,6 +231,7 @@ const evidenceHistoryDetailCsvButton = document.querySelector('#download-evidenc
 
 let evidenceHistoryGeneration = 0;
 let latestEvidenceHistory = null;
+let selectedEvidenceCaseProgression = null;
 let selectedEvidenceHotspot = null;
 let latestEvidenceHistoryFiles = null;
 let historyDetailRequest = 0;
@@ -1391,7 +1397,7 @@ async function openHistoryPair(fromIndex, toIndex, kind = 'custom', focusPath = 
   if (!history || !files ||
       !Number.isSafeInteger(fromIndex) || !Number.isSafeInteger(toIndex) ||
       fromIndex < 0 || fromIndex >= toIndex || toIndex >= files.length ||
-      !['custom', 'adjacent', 'baseline'].includes(kind)) {
+      !['custom', 'adjacent', 'baseline', 'case'].includes(kind)) {
     historyMessage('Choose two different history snapshots in chronological order.', true);
     return;
   }
@@ -1486,7 +1492,8 @@ function historyDetailJson(entry) {
     format: 'json-diff-view-history-transition-detail',
     version: 1,
     archived_not_reverified: true,
-    history_pair_index: entry.mode === 'custom' ? null : entry.index + 1,
+    history_pair_index: ['custom', 'case'].includes(entry.mode) ?
+      null : entry.index + 1,
     comparison_mode: entry.mode,
     baseline_snapshot_index: entry.fromIndex + 1,
     candidate_snapshot_index: entry.toIndex + 1,
@@ -1732,6 +1739,80 @@ function populateHistoryCaseFilter(history) {
   evidenceHistoryCaseFilter.value = 'all';
   evidenceHistoryCaseFilter.disabled = false;
 }
+
+function showCaseProgression(group) {
+  const history = latestEvidenceHistory;
+  const selected = history?.case_progressions.find(
+    item => item.case_id === group.id);
+  if (!history || !selected || !history.cases.includes(group)) return;
+  selectedEvidenceCaseProgression = selected;
+  evidenceCaseProgressionPanel.hidden = false;
+  evidenceCaseProgressionCsvButton.disabled = selected.comparisons.length === 0;
+  evidenceCaseProgressionSummary.textContent =
+    'SAVED EVIDENCE — NOT REVERIFIED. ' + selected.case_id + ': ' +
+    selected.snapshots + ' recorded snapshots, ' +
+    selected.comparisons_count + ' same-case comparisons, ' +
+    selected.separated_runs + ' separate runs, ' +
+    selected.intervening_other_case_snapshots +
+    ' other-case snapshots between occurrences, ' +
+    selected.truncated_comparisons + ' truncated reports.' +
+    ' Comparisons connect consecutive occurrences of this same recorded ' +
+    'failure identity, independently of the main history mode.';
+  const fragment = document.createDocumentFragment();
+  if (!selected.comparisons.length) {
+    const row = document.createElement('tr');
+    const empty = cell('td',
+      'This identity appears only once; there is no same-case comparison.', 'empty');
+    empty.colSpan = 7;
+    row.append(empty);
+    fragment.append(row);
+  } else for (const item of selected.comparisons) {
+    const row = document.createElement('tr');
+    const status = (item.from_reproduced_claim ? 'reproduced' : 'inconsistent') +
+      ' → ' + (item.to_reproduced_claim ? 'reproduced' : 'inconsistent');
+    for (const value of [
+      item.from_file, item.to_file,
+      String(item.intervening_other_case_snapshots),
+      item.classification.replaceAll('-', ' '),
+      status,
+      String(item.recorded_differences) +
+        (item.report_truncated ? ' (truncated)' : '')
+    ]) row.append(cell('td', value));
+    const actionCell = document.createElement('td');
+    const inspect = document.createElement('button');
+    inspect.type = 'button';
+    inspect.className = 'button subtle';
+    inspect.textContent = 'Inspect same-case change';
+    inspect.setAttribute('aria-label',
+      'Inspect ' + selected.case_id + ' saved snapshots ' +
+      item.from_snapshot_index + ' to ' + item.to_snapshot_index);
+    inspect.addEventListener('click', () => {
+      void openHistoryPair(item.from_snapshot_index - 1,
+        item.to_snapshot_index - 1, 'case');
+    });
+    actionCell.append(inspect);
+    row.append(actionCell);
+    fragment.append(row);
+  }
+  evidenceCaseProgressionRows.replaceChildren(fragment);
+  evidenceCaseProgressionPanel.scrollIntoView({ block: 'nearest' });
+}
+evidenceCaseProgressionCsvButton.addEventListener('click', () => {
+  const history = latestEvidenceHistory;
+  const selected = selectedEvidenceCaseProgression;
+  if (!history || !selected) return;
+  try {
+    const contents = serializeEvidenceCaseProgressionCsv(history, selected);
+    downloadReport(contents,
+      'archived-evidence-' + selected.case_id + '-progression.csv',
+      'text/csv;charset=utf-8');
+    historyMessage('Selected case progression downloaded as CSV without filters.');
+  } catch (error) {
+    historyMessage('Case progression export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
 function renderHistoryCases() {
   const history = latestEvidenceHistory;
   if (!history) return;
@@ -1779,6 +1860,15 @@ function renderHistoryCases() {
       }
     });
     actions.append(compare);
+    const progression = document.createElement('button');
+    progression.type = 'button';
+    progression.className = 'button subtle';
+    progression.textContent = 'View case progression';
+    progression.disabled = item.snapshots < 2;
+    progression.setAttribute('aria-label',
+      'View recorded progression for failure identity ' + item.id);
+    progression.addEventListener('click', () => showCaseProgression(item));
+    actions.append(progression);
     row.append(actions);
     fragment.append(row);
   }
@@ -1807,6 +1897,11 @@ function invalidateEvidenceHistory() {
   latestEvidenceHistoryFiles = null;
   evidenceHistoryPanel.hidden = true;
   evidenceHistoryCasesPanel.hidden = true;
+  selectedEvidenceCaseProgression = null;
+  evidenceCaseProgressionPanel.hidden = true;
+  evidenceCaseProgressionSummary.textContent = '';
+  evidenceCaseProgressionRows.replaceChildren();
+  evidenceCaseProgressionCsvButton.disabled = true;
   evidenceHistoryCasesRows.replaceChildren();
   evidenceHistoryCasesSummary.textContent = '';
   evidenceHistoryCasesCsvButton.disabled = true;
