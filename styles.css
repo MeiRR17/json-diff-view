@@ -504,3 +504,11 @@ a{color:#155a98}
 #snapshot-semantic-summary{font-size:.84rem;font-weight:650;overflow-wrap:anywhere}
 @media(max-width:700px){.snapshot-semantic-filters label{flex:1 1 100%}.snapshot-semantic-results .result-actions{flex-wrap:wrap}}
 @media(prefers-color-scheme:dark){.snapshot-semantic-results{border-color:#3b5068}.snapshot-semantic-filters label{color:#b6cce3}.snapshot-semantic-filters select,.snapshot-semantic-filters input{background:#19293b;color:#e3f1ff;border-color:#536783}}
+
+/* Raw snapshot line comparison type and bounded alignment disclosure. */
+#snapshot-compare-change-kind{font:inherit;min-height:38px;padding:8px 10px;min-width:0;max-width:100%;border:1px solid #bdcde0;border-radius:8px;background:#fff;color:#18324d}
+#snapshot-compare-change-kind:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.workspace-snapshot-compare .snapshot-line-added td:first-child{border-left:3px solid #21845b}
+.workspace-snapshot-compare .snapshot-line-removed td:first-child{border-left:3px solid #ad5d3b}
+.workspace-snapshot-compare .snapshot-line-changed td:first-child{border-left:3px solid #3677b9}
+@media(prefers-color-scheme:dark){#snapshot-compare-change-kind{background:#19293b;color:#e3f1ff;border-color:#536783}}

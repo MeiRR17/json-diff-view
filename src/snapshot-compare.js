@@ -1,10 +1,13 @@
 /**
  * Read-only comparison of two named manual snapshot workspace files.
  * Editor drafts are treated as raw strings, including incomplete JSON.
- * The line window is index-aligned after shared prefix/suffix removal;
- * this is not an LCS diff, a semantic JSON comparison or patch execution.
+ * Changed line regions use a bounded LCS alignment, with an explicit
+ * positional fallback for large regions. Raw text is never interpreted
+ * as JSON or executed as a patch.
  */
 import { parseWorkspace } from './workspace.js';
+import { alignRawLineChanges, MAX_LINE_LCS_CELLS,
+  MAX_LINE_LCS_AXIS } from './line-diff.js';
 
 const MAX_PREVIEW_ROWS = 180;
 const MAX_LINE_PREVIEW = 240;
@@ -41,36 +44,37 @@ function compareEditor(a, b, key, id, label) {
     left[left.length - 1 - suffix] === right[right.length - 1 - suffix]) suffix++;
   const fromMiddle = left.length - prefix - suffix;
   const toMiddle = right.length - prefix - suffix;
-  const totalRows = Math.max(fromMiddle, toMiddle);
   const details = [];
-  for (let i = 0; i < Math.min(MAX_PREVIEW_ROWS, totalRows); i++) {
-    const hasFrom = i < fromMiddle, hasTo = i < toMiddle;
-    const fromText = hasFrom ? left[prefix + i] : '';
-    const toText = hasTo ? right[prefix + i] : '';
+  const alignment = alignRawLineChanges(left, right, prefix, suffix, line => {
+    // Continue computing counts, but never retain unbounded draft contents.
+    if (details.length >= MAX_PREVIEW_ROWS) return;
     details.push({
-      section: id, kind: 'raw-line',
-      field: label,
-      from_line: hasFrom ? prefix + i + 1 : null,
-      to_line: hasTo ? prefix + i + 1 : null,
-      from_preview: hasFrom ? safePreview(fromText) : '',
-      to_preview: hasTo ? safePreview(toText) : '',
-      from_present: hasFrom,
-      to_present: hasTo
+      section: id, kind: 'raw-line', field: label,
+      change_type: line.change_type,
+      from_line: line.from_line,
+      to_line: line.to_line,
+      from_preview: line.from_present ? safePreview(line.from_text) : '',
+      to_preview: line.to_present ? safePreview(line.to_text) : '',
+      from_present: line.from_present,
+      to_present: line.to_present
     });
-  }
+  });
   return {
     section: {
       id, label, kind: 'raw-text',
       changed: a !== b,
       from_bytes: byteCount(a), to_bytes: byteCount(b),
       from_lines: left.length, to_lines: right.length,
-      shared_prefix_lines: prefix,
-      shared_suffix_lines: suffix,
-      from_middle_lines: fromMiddle,
-      to_middle_lines: toMiddle,
-      aligned_middle_rows: totalRows,
+      shared_prefix_lines: prefix, shared_suffix_lines: suffix,
+      from_middle_lines: fromMiddle, to_middle_lines: toMiddle,
+      alignment_strategy: alignment.strategy,
+      alignment_limited: alignment.alignment_limited,
+      added_rows: alignment.added,
+      removed_rows: alignment.removed,
+      changed_rows: alignment.changed,
+      aligned_middle_rows: alignment.rows,
       shown_rows: details.length,
-      omitted_rows: totalRows - details.length
+      omitted_rows: alignment.rows - details.length
     },
     details
   };
@@ -95,6 +99,7 @@ export function compareSnapshotWorkspaces(fromEntry, toEntry) {
   for (const [key,label] of changedOptions) {
     details.push({
       section: 'settings', kind: 'option', field: label,
+      change_type: 'changed',
       from_line: null, to_line: null,
       from_preview: String(before[key]), to_preview: String(after[key]),
       from_present: true, to_present: true
@@ -113,6 +118,7 @@ export function compareSnapshotWorkspaces(fromEntry, toEntry) {
     version: 1,
     archived_workspace_drafts: true,
     raw_line_alignment_not_semantic_diff: true,
+    line_alignment: 'bounded-lcs-with-positional-fallback',
     patch_not_executed: true,
     from: { id: String(fromEntry.id), name: fromEntry.name },
     to: { id: String(toEntry.id), name: toEntry.name },
@@ -122,6 +128,14 @@ export function compareSnapshotWorkspaces(fromEntry, toEntry) {
       changed_option_fields: changedOptions.length,
       recorded_preview_rows: details.length,
       omitted_middle_rows: sections.reduce((n,item)=>n + item.omitted_rows,0),
+      lcs_editors: sections.filter(item => item.alignment_strategy === 'lcs').length,
+      positional_fallback_editors: sections.filter(
+        item => item.alignment_strategy === 'positional-fallback').length,
+      added_lines: sections.reduce((n,item)=>n + (item.added_rows || 0),0),
+      removed_lines: sections.reduce((n,item)=>n + (item.removed_rows || 0),0),
+      changed_lines: sections.reduce((n,item)=>n + (item.changed_rows || 0),0),
+      max_lcs_matrix_cells: MAX_LINE_LCS_CELLS,
+      max_lcs_middle_lines_per_side: MAX_LINE_LCS_AXIS,
       max_preview_rows_per_editor: MAX_PREVIEW_ROWS,
       max_characters_per_line_preview: MAX_LINE_PREVIEW
     },
@@ -142,7 +156,8 @@ export function serializeSnapshotComparisonCsv(report) {
   const lines = [[
     'from_snapshot','to_snapshot','section','entry_kind','field',
     'from_line','to_line','from_present','to_present',
-    'from_preview','to_preview','preview_only','omitted_middle_rows'
+    'from_preview','to_preview','preview_only','omitted_middle_rows',
+    'change_type','alignment_strategy','alignment_limited'
   ]];
   for (const item of report.details) {
     const section = report.sections.find(s => s.id === item.section);
@@ -150,7 +165,8 @@ export function serializeSnapshotComparisonCsv(report) {
       report.from.name, report.to.name, item.section, item.kind, item.field,
       item.from_line ?? '', item.to_line ?? '', item.from_present,
       item.to_present, item.from_preview, item.to_preview, 'true',
-      section.omitted_rows
+      section.omitted_rows, item.change_type,
+      section.alignment_strategy || 'settings', Boolean(section.alignment_limited)
     ]);
   }
   return '\uFEFF' + lines.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';

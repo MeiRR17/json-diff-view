@@ -89,7 +89,7 @@
         <p class="hint" id="workspace-snapshot-summary" role="status" aria-live="polite">No manual session snapshots yet.</p>
         <section class="workspace-snapshot-compare" aria-labelledby="snapshot-compare-heading">
           <h3 id="snapshot-compare-heading">Compare saved snapshots</h3>
-          <p class="hint">Compare a saved snapshot with another snapshot or with the current unsaved workspace, without modifying any editor. The current draft is captured only when Compare is clicked, not added to saved snapshots. Raw drafts may be incomplete JSON; raw line previews are not semantic JSON diffs.</p>
+          <p class="hint">Compare a saved snapshot with another snapshot or with the current unsaved workspace, without modifying any editor. The current draft is captured only when Compare is clicked, not added to saved snapshots. Raw drafts may be incomplete JSON; line alignment uses bounded LCS with a positional fallback for large changes, not semantic JSON comparison.</p>
           <div class="snapshot-compare-controls">
             <label for="snapshot-compare-from">Compare from</label>
             <select id="snapshot-compare-from" disabled></select>
@@ -123,14 +123,21 @@
                 <option value="patch">JSON Patch editor</option>
                 <option value="settings">Patch and range settings</option>
               </select>
+              <label for="snapshot-compare-change-kind">Line change type</label>
+              <select id="snapshot-compare-change-kind">
+                <option value="all">All types</option>
+                <option value="added">Added</option>
+                <option value="removed">Removed</option>
+                <option value="changed">Changed</option>
+              </select>
             </div>
             <div class="results-scroll">
               <table class="diff-table">
-                <thead><tr><th scope="col">Field</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
+                <thead><tr><th scope="col">Type</th><th scope="col">Field</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
                 <tbody id="snapshot-compare-rows"></tbody>
               </table>
             </div>
-            <p class="hint">Up to 180 aligned middle rows per editor and 240 characters per line are recorded. Exports contain these previews only, not full editor data. Filenames and text snippets may be sensitive.</p>
+            <p class="hint">Up to 180 changed-line previews per editor and 240 characters per line are recorded. Smaller changed regions use LCS alignment (up to 1,000 lines per side and 400,000 matrix cells); larger regions use a clearly marked positional fallback. Exports contain preview rows and strategy metadata, not complete editor drafts. Line snippets may be sensitive.</p>
           </div>
           <section class="snapshot-semantic-results" id="snapshot-semantic-results" aria-labelledby="snapshot-semantic-heading" hidden>
             <div class="section-heading">

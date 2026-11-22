@@ -56,6 +56,7 @@ const snapshotCompareResults = document.querySelector('#snapshot-compare-results
 const snapshotCompareSummary = document.querySelector('#snapshot-compare-summary');
 const snapshotCompareSections = document.querySelector('#snapshot-compare-sections');
 const snapshotCompareArea = document.querySelector('#snapshot-compare-area');
+const snapshotCompareChangeKind = document.querySelector('#snapshot-compare-change-kind');
 const snapshotCompareRows = document.querySelector('#snapshot-compare-rows');
 const snapshotCompareJson = document.querySelector('#snapshot-compare-json');
 const snapshotCompareCsv = document.querySelector('#snapshot-compare-csv');
@@ -827,16 +828,22 @@ function renderSnapshotComparison() {
     report.summary.total_sections + ' sections changed; ' +
     report.summary.changed_option_fields + ' settings changed; ' +
     report.summary.recorded_preview_rows + ' preview rows; ' +
-    report.summary.omitted_middle_rows + ' additional aligned rows omitted. ' +
-    'Text comparisons use shared-prefix/suffix line alignment, not JSON semantics. ' +
-    'No patch was executed and no editor modified.';
+    report.summary.omitted_middle_rows + ' additional change rows omitted. ' +
+    'Lines: ' + report.summary.added_lines + ' added, ' +
+    report.summary.removed_lines + ' removed, ' +
+    report.summary.changed_lines + ' changed. ' +
+    report.summary.lcs_editors + ' editors used bounded LCS alignment; ' +
+    report.summary.positional_fallback_editors + ' used positional fallback. ' +
+    'This is a raw-text comparison, not JSON semantics. No patch executed.';
   const fragment = document.createDocumentFragment();
   for (const section of report.sections) {
     const row = document.createElement('tr');
     const summary = section.kind === 'raw-text' ?
       section.from_bytes.toLocaleString() + ' → ' +
       section.to_bytes.toLocaleString() + ' bytes; ' +
-      section.from_lines + ' → ' + section.to_lines + ' lines' :
+      section.from_lines + ' → ' + section.to_lines + ' lines; ' +
+      section.alignment_strategy + ' · +' + section.added_rows +
+      ' / −' + section.removed_rows + ' / ~' + section.changed_rows :
       section.changed_options + ' of ' + section.option_count + ' settings changed';
     for (const v of [section.label, section.changed ? 'Changed' : 'Identical', summary,
       String(section.shown_rows) + (section.omitted_rows ?
@@ -852,19 +859,23 @@ function renderSnapshotComparisonDetails() {
   const report = latestSnapshotComparison;
   if (!report || !ensureLiveSnapshotComparisonFresh('raw')) return;
   const area = snapshotCompareArea.value;
-  const rows = report.details.filter(item => area === 'all' || item.section === area);
+  const changeKind = snapshotCompareChangeKind.value;
+  const rows = report.details.filter(item =>
+    (area === 'all' || item.section === area) &&
+    (changeKind === 'all' || item.change_type === changeKind));
   const fragment = document.createDocumentFragment();
   if (!rows.length) {
     const tr = document.createElement('tr');
     const td = cell('td', 'No differing preview rows in this section.', 'empty');
-    td.colSpan = 5;
+    td.colSpan = 6;
     tr.append(td);
     fragment.append(tr);
   } else for (const item of rows) {
     const tr = document.createElement('tr');
-    const prefix = item.kind === 'option' ? item.field : item.field;
+    tr.className = 'snapshot-line-' + item.change_type;
     for (const value of [
-      prefix,
+      item.change_type,
+      item.field,
       item.from_line === null ? '—' : String(item.from_line),
       item.from_present ? item.from_preview : '(not present)',
       item.to_line === null ? '—' : String(item.to_line),
@@ -881,6 +892,7 @@ for (const control of [snapshotCompareFrom, snapshotCompareTo]) {
   });
 }
 snapshotCompareArea.addEventListener('change', renderSnapshotComparisonDetails);
+snapshotCompareChangeKind.addEventListener('change', renderSnapshotComparisonDetails);
 snapshotCompareRun.addEventListener('click', () => {
   if (snapshotCompareRun.disabled) return;
   try {
