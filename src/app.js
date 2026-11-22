@@ -8,6 +8,9 @@ import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
 import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
 import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
+import {
+  buildEvidenceHistory, serializeEvidenceHistoryJson, serializeEvidenceHistoryCsv
+} from './evidence-history.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const MAX_PREVIEW_CHARS = 1200;
@@ -175,7 +178,19 @@ const evidenceComparePageSummary = document.querySelector('#evidence-comparison-
 const copyEvidenceCompareButton = document.querySelector('#copy-evidence-comparison');
 const downloadEvidenceCompareJsonButton = document.querySelector('#download-evidence-comparison-json');
 const downloadEvidenceCompareCsvButton = document.querySelector('#download-evidence-comparison-csv');
+const evidenceHistoryFiles = document.querySelector('#evidence-history-files');
+const evidenceHistoryRunButton = document.querySelector('#run-evidence-history');
+const evidenceHistoryStatus = document.querySelector('#evidence-history-status');
+const evidenceHistoryPanel = document.querySelector('#evidence-history-results');
+const evidenceHistorySummary = document.querySelector('#evidence-history-summary');
+const evidenceHistoryRows = document.querySelector('#evidence-history-rows');
+const evidenceHistoryFilter = document.querySelector('#evidence-history-filter');
+const evidenceHistoryCopyButton = document.querySelector('#copy-evidence-history');
+const evidenceHistoryJsonButton = document.querySelector('#download-evidence-history-json');
+const evidenceHistoryCsvButton = document.querySelector('#download-evidence-history-csv');
 
+let evidenceHistoryGeneration = 0;
+let latestEvidenceHistory = null;
 let evidenceCompareGeneration = 0;
 let latestEvidenceComparison = null;
 let evidenceComparisonPage = 0;
@@ -1238,6 +1253,138 @@ function downloadExpectedReport(format) {
 }
 downloadExpectedJsonButton.addEventListener('click', () => downloadExpectedReport('json'));
 downloadExpectedCsvButton.addEventListener('click', () => downloadExpectedReport('csv'));
+
+// Multi-archive review is an offline, read-only workflow. The user must
+// choose ordered, date-prefixed filenames; filenames—not timestamps or picker
+// order—are the sole source of chronology.
+function historyMessage(message, error = false) {
+  evidenceHistoryStatus.textContent = message;
+  evidenceHistoryStatus.classList.toggle('error', error);
+}
+function invalidateEvidenceHistory() {
+  evidenceHistoryGeneration++;
+  latestEvidenceHistory = null;
+  evidenceHistoryPanel.hidden = true;
+  evidenceHistoryRows.replaceChildren();
+  evidenceHistorySummary.textContent = '';
+  evidenceHistoryFilter.value = 'all';
+  evidenceHistoryCopyButton.disabled = true;
+  evidenceHistoryJsonButton.disabled = true;
+  evidenceHistoryCsvButton.disabled = true;
+}
+function renderEvidenceHistory() {
+  if (!latestEvidenceHistory) return;
+  const history = latestEvidenceHistory;
+  const transitions = history.transitions.filter(t =>
+    evidenceHistoryFilter.value === 'all' ||
+    t.classification === evidenceHistoryFilter.value
+  );
+  evidenceHistoryPanel.hidden = false;
+  evidenceHistorySummary.textContent =
+    history.summary.archives + ' archived snapshots, ' +
+    history.summary.transitions + ' consecutive transitions. ' +
+    history.summary.reproduced_claims + ' archives claimed reproduction, ' +
+    history.summary.different_failure_identities +
+    ' comparisons crossed different failure identities, ' +
+    history.summary.truncated_transitions + ' truncated transition reports. ' +
+    transitions.length + ' transitions match the filter. ' +
+    'Filename ascending order is used; the files are NOT reverified.';
+  const fragment = document.createDocumentFragment();
+  if (!transitions.length) {
+    const row = document.createElement('tr');
+    const empty = cell('td', 'No transitions match this classification filter.', 'empty');
+    empty.colSpan = 6;
+    row.append(empty);
+    fragment.append(row);
+  } else for (const item of transitions) {
+    const row = document.createElement('tr');
+    for (const value of [
+      item.from_file, item.to_file, item.classification.replaceAll('-', ' '),
+      (item.from_reproduced_claim ? 'reproduced' : 'inconsistent') + ' → ' +
+        (item.to_reproduced_claim ? 'reproduced' : 'inconsistent'),
+      item.same_failure_identity ? 'same case' : 'different case',
+      String(item.differences) + (item.truncated ? ' (truncated)' : '')
+    ]) row.append(cell('td', value));
+    fragment.append(row);
+  }
+  evidenceHistoryRows.replaceChildren(fragment);
+}
+evidenceHistoryFiles.addEventListener('change', () => {
+  invalidateEvidenceHistory();
+  historyMessage('Selected evidence files changed. Analyze the timeline again.');
+});
+evidenceHistoryFilter.addEventListener('change', renderEvidenceHistory);
+evidenceHistoryRunButton.addEventListener('click', async () => {
+  invalidateEvidenceHistory();
+  const request = evidenceHistoryGeneration;
+  const selected = [...(evidenceHistoryFiles.files || [])];
+  if (selected.length < 2 || selected.length > 10) {
+    historyMessage('Select between 2 and 10 saved evidence JSON files.', true);
+    return;
+  }
+  if (selected.some(file => file.size > MAX_REPORT_EXPORT_BYTES)) {
+    historyMessage('Each evidence file must be no larger than 8 MiB.', true);
+    return;
+  }
+  // Codepoint sort is deliberate and deterministic, independent of OS
+  // locale and browser file-picker selection order.
+  selected.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  if (selected.some((file, i) => i > 0 && file.name === selected[i - 1].name)) {
+    historyMessage('Duplicate filenames cannot establish a reliable timeline. Rename files first.', true);
+    return;
+  }
+  historyMessage('Reading archived evidence files locally in filename order…');
+  try {
+    const archives = [];
+    // Read sequentially, not all at once, to reduce temporary memory use.
+    for (const file of selected) {
+      const content = await file.text();
+      if (request !== evidenceHistoryGeneration) return;
+      archives.push({ name: file.name, text: content });
+    }
+    const history = buildEvidenceHistory(archives);
+    if (request !== evidenceHistoryGeneration) return;
+    latestEvidenceHistory = history;
+    renderEvidenceHistory();
+    evidenceHistoryCopyButton.disabled = false;
+    evidenceHistoryJsonButton.disabled = false;
+    evidenceHistoryCsvButton.disabled = false;
+    historyMessage('Archived evidence timeline built. No patches executed and no editors modified.');
+  } catch (error) {
+    if (request === evidenceHistoryGeneration) {
+      historyMessage('Could not build evidence timeline: ' +
+        (error instanceof Error ? error.message : 'invalid archive'), true);
+    }
+  }
+});
+evidenceHistoryCopyButton.addEventListener('click', async () => {
+  if (!latestEvidenceHistory) return;
+  try {
+    const text = serializeEvidenceHistoryJson(latestEvidenceHistory);
+    fitInput(text, 'Evidence history');
+    await navigator.clipboard.writeText(text);
+    historyMessage('Full archived history copied. Classification filter did not affect the export.');
+  } catch (error) {
+    historyMessage('Could not copy history: ' +
+      (error instanceof Error ? error.message : 'clipboard unavailable'), true);
+  }
+});
+function exportEvidenceHistory(format) {
+  if (!latestEvidenceHistory) return;
+  try {
+    const csv = format === 'csv';
+    const text = csv ? serializeEvidenceHistoryCsv(latestEvidenceHistory) :
+      serializeEvidenceHistoryJson(latestEvidenceHistory);
+    downloadReport(text, 'archived-evidence-history.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    historyMessage('Full evidence timeline downloaded as ' + format.toUpperCase() + '.');
+  } catch (error) {
+    historyMessage('Timeline export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+evidenceHistoryJsonButton.addEventListener('click', () => exportEvidenceHistory('json'));
+evidenceHistoryCsvButton.addEventListener('click', () => exportEvidenceHistory('csv'));
 
 // Saved-evidence comparison does not touch the document and patch editors.
 // It compares two untrusted archived claims, not a newly executed replay.

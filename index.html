@@ -218,6 +218,46 @@
           </nav>
         </section>
       </section>
+      <section class="evidence-history-workspace" aria-labelledby="evidence-history-heading">
+        <h3 id="evidence-history-heading">Review saved evidence history</h3>
+        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Each consecutive pair is compared as archived claims only; different failure cases are explicitly flagged. No patch is executed.</p>
+        <div class="evidence-history-inputs">
+          <label for="evidence-history-files">Saved evidence files</label>
+          <input id="evidence-history-files" type="file" multiple accept=".json,application/json">
+          <button class="button subtle" id="run-evidence-history" type="button">Analyze evidence history</button>
+        </div>
+        <p class="status" id="evidence-history-status" role="status" aria-live="polite">Select 2–10 saved verification evidence files.</p>
+        <div id="evidence-history-results" hidden>
+          <div class="section-heading">
+            <h4>Consecutive evidence transitions</h4>
+            <div class="result-actions">
+              <button class="button subtle" id="copy-evidence-history" type="button" disabled>Copy history</button>
+              <button class="button subtle" id="download-evidence-history-json" type="button" disabled>↓ History JSON</button>
+              <button class="button subtle" id="download-evidence-history-csv" type="button" disabled>↓ History CSV</button>
+            </div>
+          </div>
+          <p id="evidence-history-summary" role="status" aria-live="polite"></p>
+          <div class="evidence-history-filter">
+            <label for="evidence-history-filter">Transition classification</label>
+            <select id="evidence-history-filter">
+              <option value="all">All transitions</option>
+              <option value="newly-reproduced">Newly reproduced</option>
+              <option value="no-longer-reproduced">No longer reproduced</option>
+              <option value="behavioral-drift">Behavioral drift</option>
+              <option value="checkpoint-drift">Checkpoint drift</option>
+              <option value="metadata-only">Metadata only</option>
+              <option value="different-failure-case">Different failure identity</option>
+              <option value="unchanged">Unchanged</option>
+            </select>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">Baseline file</th><th scope="col">Candidate file</th><th scope="col">Classification</th><th scope="col">Reported status</th><th scope="col">Failure identity</th><th scope="col">Changes</th></tr></thead>
+              <tbody id="evidence-history-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
       <p class="hint">Paste a JSON Patch array, import a local .jsonpatch/.json file, or use the patch generated above. Choose the source editor for the preview. A reverse generated patch uses <strong>After</strong> as its source automatically. The preview is detached: neither document changes until you explicitly send the result to the opposite editor.</p>
       <div class="patch-base-control">
         <label for="patch-base">Apply patch to a copy of</label>
@@ -488,7 +528,7 @@
     <aside class="note">
       <h2>How comparison works</h2>
       <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
-      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. After a user-triggered preview, the expected-result comparison shows whether the detached patch result structurally matches the opposite editor, including any mismatched paths. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview; the failing operation is identified and the last successful intermediate document can be inspected separately when within limits. A portable failure bundle or isolated one-operation reproduction can be created on demand and imported later, choosing the full prefix or the failed operation alone. Import never executes the patch automatically; a separate Verify imported failure action replays it on detached copies, checks the stored checkpoint and failure position, and provides a filterable checkpoint mismatch report with local JSON/CSV exports. Portable verification evidence can be saved and reopened for read-only review; opening saved evidence never replays a patch and must not be mistaken for a new verification. Two saved evidence archives can be compared offline to inspect changes in their recorded findings, without claiming a fresh replay. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. After a user-triggered preview, the expected-result comparison shows whether the detached patch result structurally matches the opposite editor, including any mismatched paths. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview; the failing operation is identified and the last successful intermediate document can be inspected separately when within limits. A portable failure bundle or isolated one-operation reproduction can be created on demand and imported later, choosing the full prefix or the failed operation alone. Import never executes the patch automatically; a separate Verify imported failure action replays it on detached copies, checks the stored checkpoint and failure position, and provides a filterable checkpoint mismatch report with local JSON/CSV exports. Portable verification evidence can be saved and reopened for read-only review; opening saved evidence never replays a patch and must not be mistaken for a new verification. Two saved evidence archives can be compared offline to inspect changes in their recorded findings, without claiming a fresh replay. A history of 2–10 saved archives can also be reviewed in filename order to summarize consecutive transitions without executing patches. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
     </aside>
   </main>
   <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>
