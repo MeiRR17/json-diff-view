@@ -59,6 +59,28 @@
         <span class="hint">Includes three raw editor drafts and patch/range settings. Opening a workspace previews the changes; you choose which sections to restore. Undo restore can revert the last confirmed replacement without touching unrelated edits; download a pre-restore backup to preserve recovery across reloads.</span>
       </div>
       <p id="workspace-status" class="hint" role="status" aria-live="polite">Select a saved workspace file to preview and restore chosen sections.</p>
+      <section class="workspace-snapshots" aria-labelledby="workspace-snapshots-heading">
+        <div class="section-heading">
+          <h2 id="workspace-snapshots-heading">Manual session snapshots</h2>
+        </div>
+        <p class="hint">Keep several named editing states in memory for this tab. No autosave, server upload or persistent browser storage. Saved snapshots disappear on reload unless downloaded as workspace files.</p>
+        <div class="workspace-snapshot-controls">
+          <label for="workspace-snapshot-name">Snapshot name</label>
+          <input id="workspace-snapshot-name" type="text" maxlength="80"
+            placeholder="e.g. Before migration">
+          <button class="button subtle" type="button" id="workspace-snapshot-save">Save in tab</button>
+          <label for="workspace-snapshot-select">Saved snapshot</label>
+          <select id="workspace-snapshot-select" disabled>
+            <option value="">No session snapshots</option>
+          </select>
+          <div class="workspace-snapshot-actions">
+            <button class="button subtle" type="button" id="workspace-snapshot-preview" disabled>Preview restore</button>
+            <button class="button subtle" type="button" id="workspace-snapshot-download" disabled>↓ Download snapshot</button>
+            <button class="button subtle" type="button" id="workspace-snapshot-delete" disabled>Delete snapshot</button>
+          </div>
+        </div>
+        <p class="hint" id="workspace-snapshot-summary" role="status" aria-live="polite">No manual session snapshots yet.</p>
+      </section>
       <section class="workspace-preview" id="workspace-preview" aria-labelledby="workspace-preview-heading" hidden>
         <h2 id="workspace-preview-heading">Review workspace restore</h2>
         <p id="workspace-preview-summary" class="hint" role="status" aria-live="polite"></p>

@@ -434,3 +434,17 @@ a{color:#155a98}
 .workspace-backup-controls .button:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.workspace-backup-controls .button{width:100%}}
 @media(prefers-color-scheme:dark){.workspace-backup-controls{border-color:#3b5068}}
+
+/* Bounded, memory-only editing checkpoints with explicit preview and export. */
+.workspace-snapshots{margin:18px 0;padding:15px 0;border-top:1px solid #d8e1ed;border-bottom:1px solid #d8e1ed}
+.workspace-snapshots h2{font-size:1rem;margin:0}
+.workspace-snapshots .hint{overflow-wrap:anywhere}
+.workspace-snapshot-controls{display:grid;grid-template-columns:minmax(100px,145px) minmax(0,1fr) auto;align-items:center;gap:10px;margin:12px 0}
+.workspace-snapshot-controls label{font-size:.84rem;font-weight:650;color:#3d5471}
+.workspace-snapshot-controls input,.workspace-snapshot-controls select{font:inherit;min-width:0;width:100%;min-height:38px;padding:8px 10px;max-width:100%;background:#fff;color:#18324d;border:1px solid #bdcde0;border-radius:8px}
+.workspace-snapshot-controls input:focus-visible,.workspace-snapshot-controls select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.workspace-snapshot-actions{grid-column:2/span 2;display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.workspace-snapshot-actions .button{font-size:.82rem}
+#workspace-snapshot-summary{font-weight:650;font-size:.84rem}
+@media(max-width:700px){.workspace-snapshot-controls{grid-template-columns:1fr}.workspace-snapshot-actions{grid-column:1}.workspace-snapshot-actions .button{flex:1 1 155px}}
+@media(prefers-color-scheme:dark){.workspace-snapshots{border-color:#3b5068}.workspace-snapshot-controls label{color:#b6cce3}.workspace-snapshot-controls input,.workspace-snapshot-controls select{color:#e3f1ff;background:#19293b;border-color:#536783}}

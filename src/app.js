@@ -6,6 +6,7 @@ import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 import { serializeWorkspace, parseWorkspace } from './workspace.js';
+import { createSessionSnapshotStore } from './session-snapshots.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
 import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
 import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
@@ -26,6 +27,13 @@ const workspaceOpenButton = document.querySelector('#import-workspace');
 const workspaceFile = document.querySelector('#workspace-file');
 const workspaceStatus = document.querySelector('#workspace-status');
 const workspaceUndoButton = document.querySelector('#undo-workspace-restore');
+const workspaceSnapshotName = document.querySelector('#workspace-snapshot-name');
+const workspaceSnapshotSave = document.querySelector('#workspace-snapshot-save');
+const workspaceSnapshotSelect = document.querySelector('#workspace-snapshot-select');
+const workspaceSnapshotPreview = document.querySelector('#workspace-snapshot-preview');
+const workspaceSnapshotDownload = document.querySelector('#workspace-snapshot-download');
+const workspaceSnapshotDelete = document.querySelector('#workspace-snapshot-delete');
+const workspaceSnapshotSummary = document.querySelector('#workspace-snapshot-summary');
 const workspacePreview = document.querySelector('#workspace-preview');
 const workspacePreviewSummary = document.querySelector('#workspace-preview-summary');
 const workspacePreviewRows = document.querySelector('#workspace-preview-rows');
@@ -274,6 +282,7 @@ let impactPage = 0;
 let patchImportSequence = 0;
 let bundleImportSequence = 0;
 let workspaceImportSequence = 0;
+const sessionSnapshots = createSessionSnapshotStore();
 let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
 let latestInspection = null;
@@ -485,6 +494,103 @@ workspaceFile.addEventListener('change', event => {
 workspaceCancelButton.addEventListener('click', () => {
   discardWorkspaceStaging('Workspace restore canceled. No editor was modified.');
 });
+// Explicit in-tab snapshots; the complete serialized workspace is retained
+// only in memory. Persist selected snapshots by downloading them manually.
+function selectedSessionSnapshot() {
+  return sessionSnapshots.read(workspaceSnapshotSelect.value);
+}
+function renderSessionSnapshotControls(preferredId = '') {
+  const items = sessionSnapshots.list();
+  const previousId = preferredId || workspaceSnapshotSelect.value;
+  workspaceSnapshotSelect.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = items.length ? 'Choose a saved snapshot' : 'No session snapshots';
+  workspaceSnapshotSelect.append(placeholder);
+  for (const item of items) {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = item.name + ' (' + formatBytes(item.bytes) + ')';
+    workspaceSnapshotSelect.append(option);
+  }
+  if (items.some(item => item.id === previousId)) {
+    workspaceSnapshotSelect.value = previousId;
+  }
+  workspaceSnapshotSelect.disabled = items.length === 0;
+  const selected = selectedSessionSnapshot() !== null;
+  workspaceSnapshotPreview.disabled = !selected;
+  workspaceSnapshotDownload.disabled = !selected;
+  workspaceSnapshotDelete.disabled = !selected;
+  const usage = sessionSnapshots.usage();
+  workspaceSnapshotSave.disabled = usage.count >= usage.maxCount;
+  workspaceSnapshotSummary.textContent =
+    usage.count + '/' + usage.maxCount + ' manual snapshots · ' +
+    formatBytes(usage.bytes) + ' of 24 MiB in tab memory. ' +
+    'Closing or refreshing this tab discards them. Download one to preserve it.';
+}
+workspaceSnapshotSelect.addEventListener('change', () => renderSessionSnapshotControls());
+workspaceSnapshotSave.addEventListener('click', () => {
+  try {
+    const contents = serializeWorkspace(currentWorkspaceValues());
+    const name = workspaceSnapshotName.value.trim() ||
+      'Snapshot ' + (sessionSnapshots.usage().count + 1);
+    const entry = sessionSnapshots.add(name, contents);
+    renderSessionSnapshotControls(entry.id);
+    workspaceMessage('Saved “' + entry.name +
+      '” in this tab only. Download it to keep it after a reload.');
+  } catch (error) {
+    workspaceMessage('Could not save session snapshot: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+workspaceSnapshotPreview.addEventListener('click', () => {
+  const entry = selectedSessionSnapshot();
+  if (!entry) return;
+  try {
+    // A new preview supersedes pending file imports. It does not write into
+    // an editor until the user separately confirms the existing restore UI.
+    discardWorkspaceStaging();
+    invalidateAllEditorImports();
+    patchImportSequence++;
+    bundleImportSequence++;
+    const values = parseWorkspace(entry.content);
+    stageWorkspace(values, 'Session snapshot: ' + entry.name,
+      currentWorkspaceValues());
+    stagedWorkspace.sessionSnapshotId = entry.id;
+    workspaceMessage('Snapshot preview ready. Select sections and apply only if desired.');
+    workspacePreview.scrollIntoView({ block: 'nearest' });
+  } catch (error) {
+    workspaceMessage('Could not open session snapshot: ' +
+      (error instanceof Error ? error.message : 'invalid workspace'), true);
+  }
+});
+workspaceSnapshotDownload.addEventListener('click', () => {
+  const entry = selectedSessionSnapshot();
+  if (!entry) return;
+  try {
+    downloadReport(entry.content, 'json-diff-view-snapshot-' + entry.id + '.json',
+      'application/json;charset=utf-8');
+    workspaceMessage('Snapshot download initiated. Check your Downloads folder.');
+  } catch (error) {
+    workspaceMessage('Could not download snapshot: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+workspaceSnapshotDelete.addEventListener('click', () => {
+  const entry = selectedSessionSnapshot();
+  if (!entry) return;
+  if (!confirm('Delete the in-tab snapshot “' + entry.name +
+    '”? This does not change any editor, but the snapshot will be lost ' +
+    'unless you have downloaded it.')) return;
+  if (stagedWorkspace?.sessionSnapshotId === entry.id) {
+    discardWorkspaceStaging('Deleted the snapshot that was being previewed.');
+  }
+  sessionSnapshots.remove(entry.id);
+  renderSessionSnapshotControls();
+  workspaceMessage('Session snapshot deleted. Current editors were not modified.');
+});
+renderSessionSnapshotControls();
+
 function stagedWorkspaceIsCurrent(staged) {
   return !!staged && staged === stagedWorkspace &&
     !workspaceChanged(staged.snapshot, currentWorkspaceValues());

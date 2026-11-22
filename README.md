@@ -45,6 +45,12 @@ Use **Open workspace** to stage a local file for **review before restore**. The 
   
 Restore **never parses or validates the editor JSON**, executes a JSON Patch, automatically compares documents, uploads a file or sends data to a server. The outer workspace schema and option types are validated, with an **8 MiB** file limit and **2 MiB per editor**. After a confirmed selective restore, stale comparison and patch previews are cleared; re-run Compare JSON or Preview applying patch only when ready.
 
+### Manual in-tab session snapshots
+
+Use **Save in tab** to keep a named copy of your current raw editing workspace (Before, After, Patch and range/guard settings) without downloading a file. The **Manual session snapshots** panel stores up to **8 snapshots** with a total serialized-memory cap of **24 MiB**, per-snapshot limits inherited from portable workspace files, and an explicit snapshot selector. **Preview restore** opens a stored snapshot in the same selective restore panel used for imported files, with confirmation before any selected editor value changes. **Download snapshot** saves an individual snapshot using the standard versioned Workspace v1 JSON format; **Delete snapshot** frees memory without touching current editor contents.
+
+Snapshots exist **only in the memory of the current browser tab**: no `localStorage`, IndexedDB, cloud sync, background saving or automatic uploads. Closing or refreshing the tab loses them. Download individual snapshots before closing if they are needed later; the browser controls whether downloads persist. A snapshot preview is read-only until the user applies it, and selecting a new file or an updated editor cancels stale previews. Stored snapshots may contain sensitive documents, so clear unwanted snapshots and handle downloaded files accordingly.
+
 ### Recoverable pre-restore backups
 
 During **Review workspace restore**, **Download complete current-workspace backup before applying** is selected by default. When the user confirms a restore with that option enabled, the app first initiates a local download of the complete original workspace as `json-diff-view-before-restore.json`, **before** replacing any selected fields. If preparing that backup fails the restore is canceled without modifying editors. **Back up current workspace now** lets the user export the same pre-restore snapshot independently of applying a restore. The file uses the normal `json-diff-view-workspace` v1 schema and preserves every raw editor draft and option, including sections not selected for replacement.
