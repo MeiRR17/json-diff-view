@@ -144,7 +144,7 @@
             </div>
             <section class="snapshot-hunk-search" aria-labelledby="snapshot-hunk-search-heading">
               <h4 id="snapshot-hunk-search-heading">Search changed lines across all hunks</h4>
-              <p class="hint">Search complete changed lines, even beyond the current preview. Page through matching rows and highlight any match at its exact hunk location. Only bounded snippets and locations are retained. Search never parses JSON or executes patches.</p>
+              <p class="hint">Search complete changed lines, including those beyond the current preview. Filter by line change, phrase transition, case, and whole-word boundaries; page through matches and highlight a result at its exact hunk location. Only bounded snippets and locations are retained. Search never parses JSON or executes patches.</p>
               <div class="snapshot-hunk-search-controls">
                 <label for="snapshot-hunk-search-query">Find text</label>
                 <input id="snapshot-hunk-search-query" type="search" maxlength="120" placeholder="Property, error, or value">
@@ -161,6 +161,22 @@
                   <option value="earlier">Earlier only</option>
                   <option value="later">Later only</option>
                 </select>
+                <label for="snapshot-hunk-search-type">Line change</label>
+                <select id="snapshot-hunk-search-type">
+                  <option value="all">All types</option>
+                  <option value="added">Added lines</option>
+                  <option value="removed">Removed lines</option>
+                  <option value="changed">Changed lines</option>
+                </select>
+                <label for="snapshot-hunk-search-transition">Phrase transition</label>
+                <select id="snapshot-hunk-search-transition">
+                  <option value="all">All phrase transitions</option>
+                  <option value="introduced">Introduced (later only)</option>
+                  <option value="resolved">Resolved (earlier only)</option>
+                  <option value="persistent">Present on both sides</option>
+                </select>
+                <label class="snapshot-hunk-search-toggle"><input type="checkbox" id="snapshot-hunk-search-case"> Case-sensitive</label>
+                <label class="snapshot-hunk-search-toggle"><input type="checkbox" id="snapshot-hunk-search-word"> Whole word</label>
                 <button class="button subtle" id="snapshot-hunk-search-run" type="button" disabled>Search changed lines</button>
               </div>
               <div id="snapshot-hunk-search-results" hidden>
@@ -181,11 +197,11 @@
                 </div>
                 <div class="results-scroll">
                   <table class="diff-table">
-                    <thead><tr><th scope="col">Editor</th><th scope="col">Change</th><th scope="col">Matched</th><th scope="col">Hunk / page</th><th scope="col">Earlier line</th><th scope="col">Earlier snippet</th><th scope="col">Later line</th><th scope="col">Later snippet</th><th scope="col">Inspect</th></tr></thead>
+                    <thead><tr><th scope="col">Editor</th><th scope="col">Change</th><th scope="col">Matched</th><th scope="col">Phrase transition</th><th scope="col">Hunk / page</th><th scope="col">Earlier line</th><th scope="col">Earlier snippet</th><th scope="col">Later line</th><th scope="col">Later snippet</th><th scope="col">Inspect</th></tr></thead>
                     <tbody id="snapshot-hunk-search-rows"></tbody>
                   </table>
                 </div>
-                <p class="hint">Each request scans at most 200,000 changed rows and retains only the selected page of up to 100 matches, with 240-character snippets. Other pages are recomputed on demand and are not kept in memory. Search results are labeled incomplete if changed rows remain unexamined. Selecting a match highlights its exact changed row in the hunk inspector. Exports contain the current match page only, not complete drafts.</p>
+                <p class="hint">Each request scans at most 200,000 changed rows and retains only the selected page of up to 100 matches, with 240-character snippets. Other pages are recomputed on demand and are not kept in memory. Phrase transitions describe presence in each paired changed row (not the whole JSON document). Whole-word uses Unicode letters, numbers, combining marks and underscore as word characters. Search results are labeled incomplete if changed rows remain unexamined. Selecting a match highlights its exact changed row in the hunk inspector. Exports contain the current match page only, not complete drafts.</p>
               </div>
             </section>
             <section class="snapshot-hunk-on-demand" aria-labelledby="snapshot-hunk-inspect-heading">

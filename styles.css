@@ -575,3 +575,16 @@ a{color:#155a98}
 .snapshot-hunk-on-demand tr.snapshot-hunk-search-hit:focus-visible{outline:3px solid #c18f18;outline-offset:-3px}
 @media(max-width:700px){.snapshot-hunk-search-pages label{flex:1 1 100%}.snapshot-hunk-search-pages .button{flex:1 1 150px}}
 @media(prefers-color-scheme:dark){.snapshot-hunk-search-pages label{color:#b6cce3}.snapshot-hunk-search-pages input{background:#19293b;color:#e3f1ff;border-color:#536783}.snapshot-hunk-on-demand tr.snapshot-hunk-search-hit td{background:rgba(209,165,44,.26)}}
+
+/* Precise changed-line search toggles, including Unicode whole-word mode. */
+.snapshot-hunk-search-controls .snapshot-hunk-search-toggle{
+  display:inline-flex;gap:7px;align-items:center;white-space:nowrap;
+  flex:0 1 auto;font-weight:600;font-size:.84rem;cursor:pointer
+}
+.snapshot-hunk-search-controls .snapshot-hunk-search-toggle input[type="checkbox"]{
+  flex:0 0 auto;width:18px;height:18px;min-height:0;padding:0;
+  margin:0;accent-color:#2766ac;cursor:pointer
+}
+@media(max-width:700px){
+  .snapshot-hunk-search-controls .snapshot-hunk-search-toggle{flex:1 1 44%}
+}

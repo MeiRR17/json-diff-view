@@ -84,6 +84,10 @@ const snapshotHunkDownloadCsv = document.querySelector('#snapshot-hunk-download-
 const snapshotHunkSearchQuery = document.querySelector('#snapshot-hunk-search-query');
 const snapshotHunkSearchEditor = document.querySelector('#snapshot-hunk-search-editor');
 const snapshotHunkSearchSide = document.querySelector('#snapshot-hunk-search-side');
+const snapshotHunkSearchChangeType = document.querySelector('#snapshot-hunk-search-type');
+const snapshotHunkSearchTransition = document.querySelector('#snapshot-hunk-search-transition');
+const snapshotHunkSearchCase = document.querySelector('#snapshot-hunk-search-case');
+const snapshotHunkSearchWholeWord = document.querySelector('#snapshot-hunk-search-word');
 const snapshotHunkSearchRun = document.querySelector('#snapshot-hunk-search-run');
 const snapshotHunkSearchResults = document.querySelector('#snapshot-hunk-search-results');
 const snapshotHunkSearchSummary = document.querySelector('#snapshot-hunk-search-summary');
@@ -894,7 +898,11 @@ snapshotHunkSearchQuery.addEventListener('input', () => {
   clearHunkSearch();
   refreshHunkSearchControl();
 });
-for (const control of [snapshotHunkSearchEditor, snapshotHunkSearchSide]) {
+for (const control of [
+  snapshotHunkSearchEditor, snapshotHunkSearchSide,
+  snapshotHunkSearchChangeType, snapshotHunkSearchTransition,
+  snapshotHunkSearchCase, snapshotHunkSearchWholeWord
+]) {
   control.addEventListener('change', () => {
     snapshotHunkSearchPage.value = '1';
     clearHunkSearch();
@@ -932,7 +940,12 @@ function runHunkSearch() {
     const found = searchChangedSnapshotLines(
       first, second, snapshotHunkSearchQuery.value,
       snapshotHunkSearchEditor.value, snapshotHunkSearchSide.value,
-      Number(snapshotHunkSearchPage.value));
+      Number(snapshotHunkSearchPage.value), {
+        changeType: snapshotHunkSearchChangeType.value,
+        transition: snapshotHunkSearchTransition.value,
+        caseSensitive: snapshotHunkSearchCase.checked,
+        wholeWord: snapshotHunkSearchWholeWord.checked
+      });
     if (!ensureLiveSnapshotComparisonFresh('raw')) return;
     clearHunkSearch();
     latestHunkSearch = found;
@@ -948,19 +961,24 @@ function runHunkSearch() {
       (stats.incomplete ? '. INCOMPLETE SEARCH: ' +
         stats.uninspected_changed_rows + ' changed rows were not searched.' :
         '. All changed lines in this scope were searched.') +
-      ' Open a result to highlight its exact changed row in the hunk inspector.';
+      ' Phrase transitions within these filters: ' +
+      stats.matching_rows_by_transition.introduced + ' introduced, ' +
+      stats.matching_rows_by_transition.resolved + ' resolved, ' +
+      stats.matching_rows_by_transition.persistent + ' present on both sides. ' +
+      'A transition describes phrase presence on the paired changed row, ' +
+      'not the entire document. Open a result to highlight its exact row.';
     const fragment = document.createDocumentFragment();
     if (!found.results.length) {
       const tr = document.createElement('tr');
       const td = cell('td','No matches in the inspected changed lines.','empty');
-      td.colSpan = 9;
+      td.colSpan = 10;
       tr.append(td);
       fragment.append(tr);
     } else for (const hit of found.results) {
       const tr = document.createElement('tr');
       for (const value of [
         hit.editor_label, hit.change_type, hit.match_side,
-        hit.hunk_index + ' / ' + hit.hunk_page,
+        hit.match_transition, hit.hunk_index + ' / ' + hit.hunk_page,
         hit.from_line === null ? '—' : String(hit.from_line),
         hit.from_present ? hit.from_preview : '(not present)',
         hit.to_line === null ? '—' : String(hit.to_line),
