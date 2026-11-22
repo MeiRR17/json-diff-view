@@ -477,3 +477,16 @@ a{color:#155a98}
 .workspace-snapshot-edit .button{flex:0 0 auto;font-size:.82rem}
 @media(max-width:700px){.workspace-snapshot-edit>*{flex:1 1 100%!important}}
 @media(prefers-color-scheme:dark){.workspace-snapshot-edit{border-color:#3b5068}}
+
+/* Browser-local read-only comparison of saved raw workspace drafts. */
+.workspace-snapshot-compare{margin:18px 0;padding:16px 0;border-top:1px solid #d8e1ed}
+.workspace-snapshot-compare h3{font-size:.97rem;margin:0 0 8px}
+.workspace-snapshot-compare .hint{overflow-wrap:anywhere}
+.snapshot-compare-controls,.snapshot-compare-detail-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}
+.snapshot-compare-controls label,.snapshot-compare-detail-controls label{font-size:.84rem;font-weight:650;color:#3d5471}
+.snapshot-compare-controls select,.snapshot-compare-detail-controls select{flex:1 1 170px;min-width:0;max-width:100%;font:inherit;min-height:38px;padding:8px 10px;background:#fff;color:#18324d;border:1px solid #bdcde0;border-radius:8px}
+.snapshot-compare-controls select:focus-visible,.snapshot-compare-detail-controls select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+#snapshot-compare-summary{font-size:.85rem;font-weight:650;overflow-wrap:anywhere}
+.workspace-snapshot-compare td{overflow-wrap:anywhere;white-space:pre-wrap}
+@media(max-width:700px){.snapshot-compare-controls .button{flex:1 1 100%}.snapshot-compare-controls label{flex:1 1 100%}}
+@media(prefers-color-scheme:dark){.workspace-snapshot-compare{border-color:#3b5068}.snapshot-compare-controls label,.snapshot-compare-detail-controls label{color:#b6cce3}.snapshot-compare-controls select,.snapshot-compare-detail-controls select{background:#19293b;color:#e3f1ff;border-color:#536783}}

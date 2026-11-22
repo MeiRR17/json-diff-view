@@ -87,6 +87,51 @@
           </div>
         </div>
         <p class="hint" id="workspace-snapshot-summary" role="status" aria-live="polite">No manual session snapshots yet.</p>
+        <section class="workspace-snapshot-compare" aria-labelledby="snapshot-compare-heading">
+          <h3 id="snapshot-compare-heading">Compare saved snapshots</h3>
+          <p class="hint">Compare two saved states without restoring them. Raw drafts can be incomplete JSON. Line previews are bounded and aligned by index after shared prefix/suffix removal; these are not semantic JSON diffs.</p>
+          <div class="snapshot-compare-controls">
+            <label for="snapshot-compare-from">Earlier snapshot</label>
+            <select id="snapshot-compare-from" disabled></select>
+            <label for="snapshot-compare-to">Later snapshot</label>
+            <select id="snapshot-compare-to" disabled></select>
+            <button class="button subtle" type="button" id="snapshot-compare-run" disabled>Compare saved drafts</button>
+          </div>
+          <p class="hint" id="snapshot-compare-status" role="status" aria-live="polite">Save at least two snapshots to compare them.</p>
+          <div id="snapshot-compare-results" hidden>
+            <div class="section-heading">
+              <h4>Snapshot comparison</h4>
+              <div class="result-actions">
+                <button class="button subtle" type="button" id="snapshot-compare-json" disabled>↓ Comparison JSON</button>
+                <button class="button subtle" type="button" id="snapshot-compare-csv" disabled>↓ Comparison CSV</button>
+              </div>
+            </div>
+            <p id="snapshot-compare-summary" role="status" aria-live="polite"></p>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Workspace section</th><th scope="col">Status</th><th scope="col">Before → after</th><th scope="col">Preview rows</th></tr></thead>
+                <tbody id="snapshot-compare-sections"></tbody>
+              </table>
+            </div>
+            <div class="snapshot-compare-detail-controls">
+              <label for="snapshot-compare-area">Show raw line previews</label>
+              <select id="snapshot-compare-area">
+                <option value="all">All sections</option>
+                <option value="before">Before editor</option>
+                <option value="after">After editor</option>
+                <option value="patch">JSON Patch editor</option>
+                <option value="settings">Patch and range settings</option>
+              </select>
+            </div>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Field</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
+                <tbody id="snapshot-compare-rows"></tbody>
+              </table>
+            </div>
+            <p class="hint">Up to 180 aligned middle rows per editor and 240 characters per line are recorded. Exports contain these previews only, not full editor data. Filenames and text snippets may be sensitive.</p>
+          </div>
+        </section>
         <div class="workspace-collection-actions" role="group" aria-label="Export or import a collection of snapshots">
           <button class="button subtle" type="button" id="workspace-collection-export" disabled>↓ Download all snapshots</button>
           <label for="workspace-collection-mode">When importing a collection</label>

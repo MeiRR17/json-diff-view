@@ -8,6 +8,10 @@ import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 import { serializeWorkspace, parseWorkspace } from './workspace.js';
 import { createSessionSnapshotStore } from './session-snapshots.js';
 import {
+  compareSnapshotWorkspaces, serializeSnapshotComparisonJson,
+  serializeSnapshotComparisonCsv
+} from './snapshot-compare.js';
+import {
   serializeSnapshotCollection, parseSnapshotCollection, MAX_COLLECTION_BYTES
 } from './snapshot-collection.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
@@ -40,6 +44,17 @@ const workspaceSnapshotRenameName = document.querySelector('#workspace-snapshot-
 const workspaceSnapshotRename = document.querySelector('#workspace-snapshot-rename');
 const workspaceSnapshotRecapture = document.querySelector('#workspace-snapshot-recapture');
 const workspaceSnapshotSummary = document.querySelector('#workspace-snapshot-summary');
+const snapshotCompareFrom = document.querySelector('#snapshot-compare-from');
+const snapshotCompareTo = document.querySelector('#snapshot-compare-to');
+const snapshotCompareRun = document.querySelector('#snapshot-compare-run');
+const snapshotCompareStatus = document.querySelector('#snapshot-compare-status');
+const snapshotCompareResults = document.querySelector('#snapshot-compare-results');
+const snapshotCompareSummary = document.querySelector('#snapshot-compare-summary');
+const snapshotCompareSections = document.querySelector('#snapshot-compare-sections');
+const snapshotCompareArea = document.querySelector('#snapshot-compare-area');
+const snapshotCompareRows = document.querySelector('#snapshot-compare-rows');
+const snapshotCompareJson = document.querySelector('#snapshot-compare-json');
+const snapshotCompareCsv = document.querySelector('#snapshot-compare-csv');
 const workspaceCollectionExport = document.querySelector('#workspace-collection-export');
 const workspaceCollectionImport = document.querySelector('#workspace-collection-import');
 const workspaceCollectionFile = document.querySelector('#workspace-collection-file');
@@ -304,6 +319,7 @@ let collectionImportGeneration = 0;
 let stagedCollection = null;
 let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
+let latestSnapshotComparison = null;
 let latestInspection = null;
 let inspectionPage = 0;
 let latestStep = null;
@@ -518,7 +534,149 @@ workspaceCancelButton.addEventListener('click', () => {
 function selectedSessionSnapshot() {
   return sessionSnapshots.read(workspaceSnapshotSelect.value);
 }
+function invalidateSessionSnapshotComparison() {
+  latestSnapshotComparison = null;
+  snapshotCompareResults.hidden = true;
+  snapshotCompareSummary.textContent = '';
+  snapshotCompareSections.replaceChildren();
+  snapshotCompareRows.replaceChildren();
+  snapshotCompareJson.disabled = true;
+  snapshotCompareCsv.disabled = true;
+}
+function populateSnapshotCompareSelects(items) {
+  const earlier = snapshotCompareFrom.value;
+  const later = snapshotCompareTo.value;
+  for (const control of [snapshotCompareFrom, snapshotCompareTo]) {
+    const fragment = document.createDocumentFragment();
+    for (const item of items) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.name + ' (#' + item.id + ')';
+      fragment.append(option);
+    }
+    control.replaceChildren(fragment);
+    control.disabled = items.length < 2;
+  }
+  snapshotCompareFrom.value = items.some(item => item.id === earlier) ?
+    earlier : (items[0]?.id || '');
+  snapshotCompareTo.value = items.some(item => item.id === later) ?
+    later : (items[1]?.id || '');
+  refreshSnapshotCompareAction();
+}
+function refreshSnapshotCompareAction() {
+  const a = sessionSnapshots.read(snapshotCompareFrom.value);
+  const b = sessionSnapshots.read(snapshotCompareTo.value);
+  snapshotCompareRun.disabled = !a || !b || a.id === b.id;
+}
+function snapshotCompareMessage(message, error = false) {
+  snapshotCompareStatus.textContent = message;
+  snapshotCompareStatus.classList.toggle('error', error);
+}
+function renderSnapshotComparison() {
+  const report = latestSnapshotComparison;
+  if (!report) return;
+  snapshotCompareResults.hidden = false;
+  snapshotCompareSummary.textContent =
+    'READ-ONLY RAW DRAFT COMPARISON. ' + report.from.name + ' → ' +
+    report.to.name + ': ' + report.summary.changed_sections + '/' +
+    report.summary.total_sections + ' sections changed; ' +
+    report.summary.changed_option_fields + ' settings changed; ' +
+    report.summary.recorded_preview_rows + ' preview rows; ' +
+    report.summary.omitted_middle_rows + ' additional aligned rows omitted. ' +
+    'Text comparisons use shared-prefix/suffix line alignment, not JSON semantics. ' +
+    'No patch was executed and no editor modified.';
+  const fragment = document.createDocumentFragment();
+  for (const section of report.sections) {
+    const row = document.createElement('tr');
+    const summary = section.kind === 'raw-text' ?
+      section.from_bytes.toLocaleString() + ' → ' +
+      section.to_bytes.toLocaleString() + ' bytes; ' +
+      section.from_lines + ' → ' + section.to_lines + ' lines' :
+      section.changed_options + ' of ' + section.option_count + ' settings changed';
+    for (const v of [section.label, section.changed ? 'Changed' : 'Identical', summary,
+      String(section.shown_rows) + (section.omitted_rows ?
+        ' (+' + section.omitted_rows + ' omitted)' : '')]) {
+      row.append(cell('td', v));
+    }
+    fragment.append(row);
+  }
+  snapshotCompareSections.replaceChildren(fragment);
+  renderSnapshotComparisonDetails();
+}
+function renderSnapshotComparisonDetails() {
+  const report = latestSnapshotComparison;
+  if (!report) return;
+  const area = snapshotCompareArea.value;
+  const rows = report.details.filter(item => area === 'all' || item.section === area);
+  const fragment = document.createDocumentFragment();
+  if (!rows.length) {
+    const tr = document.createElement('tr');
+    const td = cell('td', 'No differing preview rows in this section.', 'empty');
+    td.colSpan = 5;
+    tr.append(td);
+    fragment.append(tr);
+  } else for (const item of rows) {
+    const tr = document.createElement('tr');
+    const prefix = item.kind === 'option' ? item.field : item.field;
+    for (const value of [
+      prefix,
+      item.from_line === null ? '—' : String(item.from_line),
+      item.from_present ? item.from_preview : '(not present)',
+      item.to_line === null ? '—' : String(item.to_line),
+      item.to_present ? item.to_preview : '(not present)'
+    ]) tr.append(cell('td', value));
+    fragment.append(tr);
+  }
+  snapshotCompareRows.replaceChildren(fragment);
+}
+for (const control of [snapshotCompareFrom, snapshotCompareTo]) {
+  control.addEventListener('change', () => {
+    invalidateSessionSnapshotComparison();
+    refreshSnapshotCompareAction();
+  });
+}
+snapshotCompareArea.addEventListener('change', renderSnapshotComparisonDetails);
+snapshotCompareRun.addEventListener('click', () => {
+  const before = sessionSnapshots.read(snapshotCompareFrom.value);
+  const after = sessionSnapshots.read(snapshotCompareTo.value);
+  if (!before || !after || before.id === after.id) return;
+  try {
+    latestSnapshotComparison = compareSnapshotWorkspaces(before, after);
+    renderSnapshotComparison();
+    snapshotCompareJson.disabled = false;
+    snapshotCompareCsv.disabled = false;
+    snapshotCompareMessage('Snapshot comparison created locally. Exports include bounded previews, not entire drafts.');
+  } catch (error) {
+    invalidateSessionSnapshotComparison();
+    snapshotCompareMessage('Could not compare saved snapshots: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotCompareJson.addEventListener('click', () => {
+  if (!latestSnapshotComparison) return;
+  try {
+    downloadReport(serializeSnapshotComparisonJson(latestSnapshotComparison),
+      'snapshot-raw-comparison.json', 'application/json;charset=utf-8');
+    snapshotCompareMessage('Comparison JSON download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('JSON export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotCompareCsv.addEventListener('click', () => {
+  if (!latestSnapshotComparison) return;
+  try {
+    downloadReport(serializeSnapshotComparisonCsv(latestSnapshotComparison),
+      'snapshot-raw-comparison.csv', 'text/csv;charset=utf-8');
+    snapshotCompareMessage('Comparison CSV download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('CSV export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
 function renderSessionSnapshotControls(preferredId = '') {
+  invalidateSessionSnapshotComparison();
   const items = sessionSnapshots.list();
   const previousId = preferredId || workspaceSnapshotSelect.value;
   workspaceSnapshotSelect.replaceChildren();
@@ -536,6 +694,7 @@ function renderSessionSnapshotControls(preferredId = '') {
     workspaceSnapshotSelect.value = previousId;
   }
   workspaceSnapshotSelect.disabled = items.length === 0;
+  populateSnapshotCompareSelects(items);
   const selected = selectedSessionSnapshot() !== null;
   workspaceSnapshotPreview.disabled = !selected;
   workspaceSnapshotDownload.disabled = !selected;
