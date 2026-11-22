@@ -854,6 +854,9 @@ function clearHunkInspection() {
   snapshotHunkInspectionSummary.textContent = '';
   snapshotHunkInspectionRows.replaceChildren();
   snapshotHunkPageInfo.textContent = '';
+  // A different hunk can contain more pages than the last inspected one.
+  // The upper bound is known only after recalculating its alignment.
+  snapshotHunkPage.removeAttribute('max');
   snapshotHunkPagePrevious.disabled = true;
   snapshotHunkPageNext.disabled = true;
   snapshotHunkDownloadJson.disabled = true;
@@ -973,6 +976,7 @@ snapshotHunkOpen.addEventListener('click', openHunkInspection);
 snapshotHunkPrevious.addEventListener('click', () => {
   if (snapshotHunkPrevious.disabled) return;
   snapshotHunkIndex.value = String(Number(snapshotHunkIndex.value) - 1);
+  snapshotHunkPage.value = '1';
   clearHunkInspection();
   refreshHunkInspectionControl();
   openHunkInspection();
@@ -980,6 +984,7 @@ snapshotHunkPrevious.addEventListener('click', () => {
 snapshotHunkNext.addEventListener('click', () => {
   if (snapshotHunkNext.disabled) return;
   snapshotHunkIndex.value = String(Number(snapshotHunkIndex.value) + 1);
+  snapshotHunkPage.value = '1';
   clearHunkInspection();
   refreshHunkInspectionControl();
   openHunkInspection();
