@@ -1,7 +1,7 @@
 import { diffJson, parseJson } from './diff.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
 import { applyJsonPatch, applyJsonPatchPrefix, JsonPatchOperationError } from './apply.js';
-import { serializeReportJson, serializeReportCsv, serializeReportCountsJson, serializeReportCountsCsv } from './export.js';
+import { serializeReportJson, serializeReportCsv, serializeReportCountsJson, serializeReportCountsCsv, serializeReportPathsCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
@@ -154,6 +154,7 @@ const downloadReportJsonButton = document.querySelector('#download-report-json')
 const downloadReportCsvButton = document.querySelector('#download-report-csv');
 const downloadReportCountsButton = document.querySelector('#download-report-counts');
 const downloadReportCountsCsvButton = document.querySelector('#download-report-counts-csv');
+const downloadReportPathsCsvButton = document.querySelector('#download-report-paths-csv');
 const copyPatchButton = document.querySelector('#copy-patch');
 const downloadPatchButton = document.querySelector('#download-patch');
 const guardPatchCheckbox = document.querySelector('#guard-patch');
@@ -4641,6 +4642,7 @@ function resetReport() {
   downloadReportCsvButton.disabled = true;
   downloadReportCountsButton.disabled = true;
   downloadReportCountsCsvButton.disabled = true;
+  downloadReportPathsCsvButton.disabled = true;
   copyPatchButton.disabled = downloadPatchButton.disabled = true;
   summary.hidden = true;
   summary.replaceChildren();
@@ -4708,6 +4710,7 @@ function compare() {
     downloadReportCsvButton.disabled = false;
     downloadReportCountsButton.disabled = false;
     downloadReportCountsCsvButton.disabled = false;
+    downloadReportPathsCsvButton.disabled = false;
 
     latestComparison = { before: left, after: right };
     const patchStatus = refreshGeneratedPatch();
@@ -4884,6 +4887,18 @@ function exportComparison(format) {
 }
 downloadReportJsonButton.addEventListener('click', () => exportComparison('json'));
 downloadReportCsvButton.addEventListener('click', () => exportComparison('csv'));
+downloadReportPathsCsvButton.addEventListener('click', () => {
+  if (!latestReport || downloadReportPathsCsvButton.disabled) return;
+  try {
+    downloadReport(serializeReportPathsCsv(latestReport),
+      'json-differences-paths.csv', 'text/csv;charset=utf-8');
+    setStatus('Paths-only CSV exported without before/after values. JSON property names and paths may still be sensitive.' +
+      (latestReport.truncated ? ' Report truncated: only the recorded changes are included.' : ''));
+  } catch (error) {
+    setStatus('Paths CSV export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
 downloadReportCountsCsvButton.addEventListener('click', () => {
   if (!latestReport || downloadReportCountsCsvButton.disabled) return;
   try {

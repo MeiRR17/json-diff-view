@@ -110,3 +110,35 @@ export function serializeReportCountsCsv(report) {
     cells.map(cell => '"' + cell.replaceAll('"', '""') + '"').join(',')
   ).join('\r\n') + '\r\n';
 }
+
+
+/**
+ * A middle-privacy-tier CSV between full report (including before/after
+ * values) and counts-only exports. Includes the original JSON paths and
+ * change kinds, but never copies actual before/after values or patch data.
+ * JSON property names can still be sensitive: do not treat paths as anonymous.
+ *
+ * The same report bounds/completeness validation as the counts-only exporter
+ * applies. Cross-check the change categories instead of trusting stale counts.
+ */
+export function serializeReportPathsCsv(report) {
+  reportCountsSummary(report);
+  const counted = { added: 0, removed: 0, changed: 0 };
+  const lines = [['path', 'change_type', 'report_truncated']];
+  for (const change of report.changes) {
+    if (!change || typeof change !== 'object' ||
+        typeof change.path !== 'string' || !change.path.startsWith('$') ||
+        change.path.length > 2_000_000 ||
+        !Object.hasOwn(counted, change.type)) {
+      throw new TypeError('Invalid recorded change path or type.');
+    }
+    counted[change.type]++;
+    lines.push([change.path, change.type, report.truncated ? 'true' : 'false']);
+  }
+  if (Object.keys(counted).some(type => counted[type] !== report.counts[type])) {
+    throw new TypeError('Recorded change categories do not match the report counts.');
+  }
+  return '\uFEFF' + lines.map(cells =>
+    cells.map(formulaSafeCell).join(',')
+  ).join('\r\n') + '\r\n';
+}
