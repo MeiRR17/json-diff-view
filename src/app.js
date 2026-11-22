@@ -194,6 +194,12 @@ const evidenceHistoryCustomStatus = document.querySelector('#evidence-history-cu
 const evidenceHistoryCopyButton = document.querySelector('#copy-evidence-history');
 const evidenceHistoryJsonButton = document.querySelector('#download-evidence-history-json');
 const evidenceHistoryCsvButton = document.querySelector('#download-evidence-history-csv');
+const evidenceHotspotsPanel = document.querySelector('#evidence-history-hotspots');
+const evidenceHotspotsSummary = document.querySelector('#evidence-history-hotspots-summary');
+const evidenceHotspotsRows = document.querySelector('#evidence-history-hotspots-rows');
+const evidenceHotspotsScope = document.querySelector('#evidence-history-hotspots-scope');
+const evidenceHotspotsPath = document.querySelector('#evidence-history-hotspots-path');
+const evidenceHotspotsCsvButton = document.querySelector('#download-evidence-hotspots-csv');
 const evidenceHistoryDetailPanel = document.querySelector('#evidence-history-detail');
 const evidenceHistoryDetailSummary = document.querySelector('#evidence-history-detail-summary');
 const evidenceHistoryDetailRows = document.querySelector('#evidence-history-detail-rows');
@@ -1368,7 +1374,7 @@ function renderHistoryDetail() {
   }
   evidenceHistoryDetailRows.replaceChildren(fragment);
 }
-async function openHistoryPair(fromIndex, toIndex, kind = 'custom') {
+async function openHistoryPair(fromIndex, toIndex, kind = 'custom', focusPath = '') {
   const history = latestEvidenceHistory;
   const files = latestEvidenceHistoryFiles;
   if (!history || !files ||
@@ -1402,6 +1408,7 @@ async function openHistoryPair(fromIndex, toIndex, kind = 'custom') {
     evidenceHistoryDetailCopyButton.disabled = false;
     evidenceHistoryDetailJsonButton.disabled = false;
     evidenceHistoryDetailCsvButton.disabled = false;
+    if (focusPath) evidenceHistoryDetailPath.value = focusPath;
     renderHistoryDetail();
     historyMessage('Opened archived evidence snapshot ' + (fromIndex + 1) +
       ' against ' + (toIndex + 1) + ' (' + kind +
@@ -1412,12 +1419,12 @@ async function openHistoryPair(fromIndex, toIndex, kind = 'custom') {
       (error instanceof Error ? error.message : 'invalid evidence'), true);
   }
 }
-function openHistoryTransition(index) {
+function openHistoryTransition(index, focusPath = '') {
   const history = latestEvidenceHistory;
   if (!history || !Number.isSafeInteger(index) ||
       index < 0 || index >= history.transitions.length) return;
   const fromIndex = history.comparison_mode === 'baseline' ? 0 : index;
-  void openHistoryPair(fromIndex, index + 1, history.comparison_mode);
+  void openHistoryPair(fromIndex, index + 1, history.comparison_mode, focusPath);
 }
 /** Populate selects only after the archive history is successfully loaded. */
 function setupHistoryCustomPair(files) {
@@ -1547,12 +1554,107 @@ evidenceHistoryDetailJsonButton.addEventListener('click',
 evidenceHistoryDetailCsvButton.addEventListener('click',
   () => exportHistoryDetail('csv'));
 
+function renderEvidenceHotspots() {
+  const history = latestEvidenceHistory;
+  if (!history || !history.hotspots) return;
+  const hotspots = history.hotspots;
+  const needle = evidenceHotspotsPath.value.trim().toLocaleLowerCase();
+  const scope = evidenceHotspotsScope.value;
+  const matching = hotspots.paths.filter(item =>
+    (scope === 'all' || scope === item.scope) &&
+    (!needle || item.path.toLocaleLowerCase().includes(needle))
+  );
+  evidenceHotspotsPanel.hidden = false;
+  evidenceHotspotsSummary.textContent =
+    hotspots.total_recorded_paths + ' distinct normalized evidence paths across ' +
+    history.transitions.length + ' archived comparisons; ' +
+    hotspots.shown_paths + ' most frequently affected paths retained, ' +
+    matching.length + ' match the current filters.' +
+    (hotspots.truncated ? ' The list is limited to the top 200; see truncation warning.' : '') +
+    (history.summary.truncated_transitions ?
+      ' Some comparisons were truncated; counts are lower bounds.' : '') +
+    ' Snapshots are saved claims, not reverified.';
+  const fragment = document.createDocumentFragment();
+  if (!matching.length) {
+    const row = document.createElement('tr');
+    const empty = cell('td', hotspots.total_recorded_paths ?
+      'No recorded hotspot paths match these filters.' :
+      'No recorded evidence paths changed across the selected comparisons.', 'empty');
+    empty.colSpan = 5;
+    row.append(empty);
+    fragment.append(row);
+  } else for (const item of matching) {
+    const row = document.createElement('tr');
+    row.append(cell('td', item.path));
+    row.append(cell('td', item.scope));
+    row.append(cell('td', String(item.affected_transitions) +
+      '/' + history.transitions.length));
+    row.append(cell('td', String(item.recorded_occurrences)));
+    const actionCell = document.createElement('td');
+    const button = document.createElement('button');
+    button.className = 'button subtle';
+    button.type = 'button';
+    button.textContent = 'Inspect latest change';
+    button.setAttribute('aria-label', 'Inspect latest archived change for ' + item.path);
+    button.addEventListener('click', () => {
+      openHistoryTransition(item.last_transition - 1, item.example_report_path);
+    });
+    actionCell.append(button);
+    row.append(actionCell);
+    fragment.append(row);
+  }
+  evidenceHotspotsRows.replaceChildren(fragment);
+}
+evidenceHotspotsScope.addEventListener('change', renderEvidenceHotspots);
+evidenceHotspotsPath.addEventListener('input', renderEvidenceHotspots);
+evidenceHotspotsCsvButton.addEventListener('click', () => {
+  if (!latestEvidenceHistory) return;
+  const history = latestEvidenceHistory;
+  try {
+    // serializeReportCsv handles CSV quoting and spreadsheet formula injection.
+    // A structured CSV row is represented as a descriptive changed object.
+    const rows = history.hotspots.paths.map(item => ({
+      path: item.path,
+      type: 'changed',
+      before: {
+        scope: item.scope,
+        affected_transitions: item.affected_transitions,
+        recorded_occurrences: item.recorded_occurrences
+      },
+      after: {
+        transition_indexes: item.transition_indexes,
+        latest_transition: item.last_transition,
+        example_report_path: item.example_report_path
+      }
+    }));
+    downloadReport(serializeReportCsv({
+      changes: rows,
+      counts: { added: 0, removed: 0, changed: rows.length },
+      truncated: history.hotspots.truncated ||
+        history.summary.truncated_transitions > 0
+    }, {
+      source: 'Archived evidence hotspot frequency (mode: ' +
+        history.comparison_mode + '; not reverified)'
+    }), 'archived-evidence-hotspots.csv', 'text/csv;charset=utf-8');
+    historyMessage('Unfiltered recorded hotspot summary downloaded as CSV.');
+  } catch (error) {
+    historyMessage('Could not export hotspots: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
 function invalidateEvidenceHistory() {
   invalidateHistoryDetail();
   evidenceHistoryGeneration++;
   latestEvidenceHistory = null;
   latestEvidenceHistoryFiles = null;
   evidenceHistoryPanel.hidden = true;
+  evidenceHotspotsPanel.hidden = true;
+  evidenceHotspotsSummary.textContent = '';
+  evidenceHotspotsRows.replaceChildren();
+  evidenceHotspotsScope.value = 'all';
+  evidenceHotspotsPath.value = '';
+  evidenceHotspotsCsvButton.disabled = true;
   evidenceHistoryCustomFrom.replaceChildren();
   evidenceHistoryCustomTo.replaceChildren();
   evidenceHistoryCustomFrom.disabled = true;
@@ -1667,6 +1769,8 @@ evidenceHistoryRunButton.addEventListener('click', async () => {
     latestEvidenceHistoryFiles = selected;
     setupHistoryCustomPair(selected);
     renderEvidenceHistory();
+    renderEvidenceHotspots();
+    evidenceHotspotsCsvButton.disabled = false;
     evidenceHistoryCopyButton.disabled = false;
     evidenceHistoryJsonButton.disabled = false;
     evidenceHistoryCsvButton.disabled = false;

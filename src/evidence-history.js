@@ -25,6 +25,76 @@ function validateArchive(item) {
   safeName(item.name);
   return parseVerificationEvidence(item.text);
 }
+const MAX_HOTSPOTS = 200;
+
+/**
+ * Group repeated evidence changes across transitions by normalized evidence
+ * path. Checkpoint row subfield changes (before/after and array indices)
+ * belong to the same source-path/type evidence entry, not separate hotspots.
+ * These are reported archive paths, not proof of a live source mutation.
+ */
+function hotspotIdentity(path) {
+  const prefix = '$.checkpoint.differences_by_path_and_type[';
+  if (path.startsWith(prefix)) {
+    const quoted = /^("(?:\\.|[^"\\])*")\]/u.exec(path.slice(prefix.length));
+    if (quoted) {
+      try {
+        const checkpointKey = JSON.parse(quoted[1]);
+        return { path: 'checkpoint row: ' + checkpointKey, scope: 'checkpoint' };
+      } catch {
+        // Fall through to the full normalized evidence report path.
+      }
+    }
+  }
+  let scope = 'other';
+  if (path === '$.metadata' || path.startsWith('$.metadata.')) scope = 'metadata';
+  if (path === '$.findings' || path.startsWith('$.findings.')) scope = 'findings';
+  if (path === '$.checkpoint' || path.startsWith('$.checkpoint.')) scope = 'checkpoint';
+  return { path, scope };
+}
+function recordHotspots(byPath, changes, transitionIndex) {
+  const seen = new Set();
+  for (const change of changes) {
+    const identity = hotspotIdentity(change.path);
+    const key = identity.scope + ':' + identity.path;
+    let entry = byPath.get(key);
+    if (!entry) {
+      entry = {
+        path: identity.path,
+        scope: identity.scope,
+        affected_transitions: 0,
+        recorded_occurrences: 0,
+        first_transition: transitionIndex,
+        last_transition: transitionIndex,
+        example_report_path: change.path,
+        transition_indexes: []
+      };
+      byPath.set(key, entry);
+    }
+    entry.recorded_occurrences++;
+    entry.last_transition = transitionIndex;
+    entry.example_report_path = change.path;
+    if (!seen.has(key)) {
+      seen.add(key);
+      entry.affected_transitions++;
+      entry.transition_indexes.push(transitionIndex);
+    }
+  }
+}
+function summarizeHotspots(byPath) {
+  const all = [...byPath.values()].sort((a, b) =>
+    b.affected_transitions - a.affected_transitions ||
+    b.recorded_occurrences - a.recorded_occurrences ||
+    (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+  );
+  return {
+    total_recorded_paths: all.length,
+    shown_paths: Math.min(MAX_HOTSPOTS, all.length),
+    truncated: all.length > MAX_HOTSPOTS,
+    paths: all.slice(0, MAX_HOTSPOTS)
+  };
+}
+
 export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
   if (mode !== 'adjacent' && mode !== 'baseline') {
     throw new TypeError('History mode must be adjacent or baseline.');
@@ -55,11 +125,13 @@ export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
   const classifications = Object.create(null);
   let differentCases = 0;
   let truncatedTransitions = 0;
+  const hotspotAccumulator = new Map();
   for (let i = 1; i < archives.length; i++) {
     const fromIndex = mode === 'baseline' ? 0 : i - 1;
     const comparison = compareVerificationArchives(
       archives[fromIndex].text, archives[i].text);
     const assessment = comparison.assessment;
+    recordHotspots(hotspotAccumulator, comparison.report.changes, i);
     if (!assessment.sameCase) differentCases++;
     if (assessment.truncated) truncatedTransitions++;
     const name = assessment.classification;
@@ -95,7 +167,8 @@ export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
       classifications
     },
     snapshots,
-    transitions
+    transitions,
+    hotspots: summarizeHotspots(hotspotAccumulator)
   };
 }
 function csvCell(value) {

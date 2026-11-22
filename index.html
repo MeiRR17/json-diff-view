@@ -220,7 +220,7 @@
       </section>
       <section class="evidence-history-workspace" aria-labelledby="evidence-history-heading">
         <h3 id="evidence-history-heading">Review saved evidence history</h3>
-        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Compare consecutive archives or every later file against the first baseline; use Inspect comparison to open full recorded differences with filters and local exports. Different failure cases are flagged. No patch is executed.</p>
+        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Compare consecutive archives or every later file against the first baseline; use Inspect comparison to open full recorded differences with filters and local exports. Different failure cases are flagged. Recurring evidence change paths are ranked across the comparisons. No patch is executed.</p>
         <div class="evidence-history-inputs">
           <label for="evidence-history-files">Saved evidence files</label>
           <input id="evidence-history-files" type="file" multiple accept=".json,application/json">
@@ -272,6 +272,32 @@
               <tbody id="evidence-history-rows"></tbody>
             </table>
           </div>
+          <section class="evidence-hotspots" id="evidence-history-hotspots" aria-labelledby="evidence-hotspots-heading" hidden>
+            <div class="section-heading">
+              <h4 id="evidence-hotspots-heading">Recurring evidence change paths</h4>
+              <button class="button subtle" id="download-evidence-hotspots-csv" type="button" disabled>↓ Hotspots CSV</button>
+            </div>
+            <p class="hint">Ranks normalized evidence report paths by the number of comparisons in which they changed. Checkpoint before/after subfields are grouped into their source path and change type. Counts describe saved evidence, not live JSON mutations. Select a row to inspect its latest recorded comparison.</p>
+            <p id="evidence-history-hotspots-summary" role="status" aria-live="polite"></p>
+            <div class="evidence-hotspots-filters">
+              <label for="evidence-history-hotspots-scope">Evidence area</label>
+              <select id="evidence-history-hotspots-scope">
+                <option value="all">All areas</option>
+                <option value="metadata">Metadata</option>
+                <option value="findings">Findings</option>
+                <option value="checkpoint">Checkpoint</option>
+                <option value="other">Other</option>
+              </select>
+              <label for="evidence-history-hotspots-path">Path contains</label>
+              <input id="evidence-history-hotspots-path" type="search" autocomplete="off" placeholder="e.g. $.findings">
+            </div>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Normalized evidence path</th><th scope="col">Area</th><th scope="col">Comparisons affected</th><th scope="col">Occurrences</th><th scope="col">Inspect</th></tr></thead>
+                <tbody id="evidence-history-hotspots-rows"></tbody>
+              </table>
+            </div>
+          </section>
           <section class="evidence-history-detail" id="evidence-history-detail" aria-labelledby="evidence-history-detail-heading" hidden>
             <div class="section-heading">
               <h4 id="evidence-history-detail-heading">Selected snapshot comparison</h4>
