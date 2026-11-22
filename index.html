@@ -166,6 +166,13 @@
                 <button class="button subtle" type="button" id="snapshot-hunk-open" disabled>Inspect hunk</button>
                 <button class="button subtle" type="button" id="snapshot-hunk-next" disabled>Next hunk</button>
               </div>
+              <div class="snapshot-hunk-page-controls" role="group" aria-label="Navigate within a long change hunk">
+                <label for="snapshot-hunk-page">Changed-row page</label>
+                <input id="snapshot-hunk-page" type="number" min="1" step="1" value="1">
+                <button class="button subtle" type="button" id="snapshot-hunk-page-previous" disabled>Previous page</button>
+                <button class="button subtle" type="button" id="snapshot-hunk-page-next" disabled>Next page</button>
+                <span id="snapshot-hunk-page-info" role="status" aria-live="polite"></span>
+              </div>
               <div id="snapshot-hunk-inspection" hidden>
                 <div class="section-heading">
                   <h4>Selected hunk inspection</h4>
@@ -181,7 +188,7 @@
                     <tbody id="snapshot-hunk-inspection-rows"></tbody>
                   </table>
                 </div>
-                <p class="hint">At most 180 changed rows, plus up to 5 unchanged context lines on each side, are retained with 240 characters per line. Context rows come from actual aligned matching lines; changing context regenerates only the selected hunk. Exports contain bounded text snippets and complete hunk counts, never full source drafts.</p>
+                <p class="hint">A long hunk is paged in windows of 180 changed rows. Open any positive page number, or move to the previous/next page after the first inspection. Up to 5 unchanged context lines appear only on the first and last page of the whole hunk; intermediate pages do not invent neighboring matches. Each row preview is limited to 240 characters. JSON/CSV exports contain only the currently displayed window plus its counts and page metadata, never complete editor drafts.</p>
               </div>
             </section>
             <p class="hint">Changes are grouped into hunks separated by unchanged aligned lines; the selector opens any hunk with retained preview rows. Up to 48 initial hunk summaries and 180 changed-line previews per editor, with 240 characters per line, are recorded. Smaller changed regions use LCS alignment (up to 1,000 lines per side and 400,000 matrix cells); larger regions use a clearly marked positional fallback. Exports contain preview rows and strategy metadata, not complete editor drafts. Line snippets may be sensitive.</p>

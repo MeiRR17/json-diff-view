@@ -541,3 +541,12 @@ a{color:#155a98}
 .snapshot-hunk-on-demand .snapshot-line-context{opacity:.82}
 .snapshot-hunk-on-demand .snapshot-line-context td{background:rgba(125,145,166,.08);font-style:italic}
 @media(prefers-color-scheme:dark){#snapshot-hunk-context{background:#19293b;color:#e3f1ff;border-color:#536783}}
+
+/* Bounded on-demand changed-row pages inside a single hunk. */
+.snapshot-hunk-page-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:10px 0}
+.snapshot-hunk-page-controls label{font-size:.83rem;font-weight:650;color:#3d5471}
+.snapshot-hunk-page-controls input{font:inherit;min-height:38px;padding:8px 10px;border:1px solid #bdcde0;border-radius:8px;background:#fff;color:#18324d;min-width:90px;max-width:130px}
+.snapshot-hunk-page-controls input:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+#snapshot-hunk-page-info{font-size:.82rem;font-weight:650;overflow-wrap:anywhere}
+@media(max-width:700px){.snapshot-hunk-page-controls label{flex:1 1 100%}.snapshot-hunk-page-controls .button{flex:1 1 135px}}
+@media(prefers-color-scheme:dark){.snapshot-hunk-page-controls label{color:#b6cce3}.snapshot-hunk-page-controls input{background:#19293b;color:#e3f1ff;border-color:#536783}}

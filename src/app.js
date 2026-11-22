@@ -65,6 +65,10 @@ const snapshotCompareHunkSummary = document.querySelector('#snapshot-compare-hun
 const snapshotHunkEditor = document.querySelector('#snapshot-hunk-editor');
 const snapshotHunkIndex = document.querySelector('#snapshot-hunk-index');
 const snapshotHunkContext = document.querySelector('#snapshot-hunk-context');
+const snapshotHunkPage = document.querySelector('#snapshot-hunk-page');
+const snapshotHunkPagePrevious = document.querySelector('#snapshot-hunk-page-previous');
+const snapshotHunkPageNext = document.querySelector('#snapshot-hunk-page-next');
+const snapshotHunkPageInfo = document.querySelector('#snapshot-hunk-page-info');
 const snapshotHunkPrevious = document.querySelector('#snapshot-hunk-previous');
 const snapshotHunkNext = document.querySelector('#snapshot-hunk-next');
 const snapshotHunkOpen = document.querySelector('#snapshot-hunk-open');
@@ -795,6 +799,8 @@ function invalidateRawSnapshotComparison() {
   snapshotHunkOpen.disabled = true;
   snapshotHunkPrevious.disabled = true;
   snapshotHunkNext.disabled = true;
+  snapshotHunkPagePrevious.disabled = true;
+  snapshotHunkPageNext.disabled = true;
   snapshotCompareJson.disabled = true;
   snapshotCompareCsv.disabled = true;
 }
@@ -847,6 +853,9 @@ function clearHunkInspection() {
   snapshotHunkInspection.hidden = true;
   snapshotHunkInspectionSummary.textContent = '';
   snapshotHunkInspectionRows.replaceChildren();
+  snapshotHunkPageInfo.textContent = '';
+  snapshotHunkPagePrevious.disabled = true;
+  snapshotHunkPageNext.disabled = true;
   snapshotHunkDownloadJson.disabled = true;
   snapshotHunkDownloadCsv.disabled = true;
 }
@@ -862,13 +871,30 @@ function refreshHunkInspectionControl() {
     !snapshotHunkIndex.value.trim();
   snapshotHunkPrevious.disabled = snapshotHunkOpen.disabled || n <= 1;
   snapshotHunkNext.disabled = snapshotHunkOpen.disabled || n >= max;
+  const page = Number(snapshotHunkPage.value);
+  const pageValid = snapshotHunkPage.value.trim() &&
+    Number.isSafeInteger(page) && page >= 1;
+  if (!pageValid) snapshotHunkOpen.disabled = true;
+  const inspected = latestHunkInspection;
+  const sameHunk = inspected &&
+    inspected.editor.id === snapshotHunkEditor.value &&
+    inspected.summary.index === n;
+  const pages = sameHunk ? inspected.window.total_pages : null;
+  snapshotHunkPagePrevious.disabled = !sameHunk || !pageValid || page <= 1;
+  snapshotHunkPageNext.disabled = !sameHunk || !pageValid || page >= pages;
 }
 snapshotHunkEditor.addEventListener('change', () => {
   clearHunkInspection();
   snapshotHunkIndex.value = '1';
+  snapshotHunkPage.value = '1';
   refreshHunkInspectionControl();
 });
 snapshotHunkIndex.addEventListener('input', () => {
+  clearHunkInspection();
+  snapshotHunkPage.value = '1';
+  refreshHunkInspectionControl();
+});
+snapshotHunkPage.addEventListener('input', () => {
   clearHunkInspection();
   refreshHunkInspectionControl();
 });
@@ -889,7 +915,8 @@ function openHunkInspection() {
       return;
     }
     const result = inspectSnapshotHunk(from, to, snapshotHunkEditor.value,
-      Number(snapshotHunkIndex.value), Number(snapshotHunkContext.value));
+      Number(snapshotHunkIndex.value), Number(snapshotHunkContext.value),
+      Number(snapshotHunkPage.value));
     // Revalidate against current live editors before publishing the result.
     if (!ensureLiveSnapshotComparisonFresh('raw')) return;
     latestHunkInspection = result;
@@ -903,8 +930,11 @@ function openHunkInspection() {
       ', later lines ' + range(h.to_start,h.to_end) + '. ' +
       h.total_rows + ' changed rows (' + h.added + ' added, ' +
       h.removed + ' removed, ' + h.changed + ' changed); ' +
+      'page ' + result.window.page + '/' + result.window.total_pages +
+      ' (changed rows ' + result.window.first_changed_row + '–' +
+      result.window.last_changed_row + ' of ' + h.total_rows + '); ' +
       h.preview_rows + ' changed-line previews, ' + h.omitted_rows +
-      ' omitted; ' + result.context.before_lines_shown +
+      ' outside this page; ' + result.context.before_lines_shown +
       ' context lines before and ' + result.context.after_lines_shown +
       ' after. Raw text only; no JSON Patch executed.';
     const fragment = document.createDocumentFragment();
@@ -922,6 +952,13 @@ function openHunkInspection() {
     }
     snapshotHunkInspectionRows.replaceChildren(fragment);
     snapshotHunkInspection.hidden = false;
+    snapshotHunkPage.max = String(result.window.total_pages);
+    snapshotHunkPageInfo.textContent =
+      'Page ' + result.window.page + ' of ' +
+      result.window.total_pages + ' · ' +
+      result.window.first_changed_row + '–' +
+      result.window.last_changed_row + ' / ' +
+      h.total_rows + ' changed rows';
     refreshHunkInspectionControl();
     snapshotHunkDownloadJson.disabled = false;
     snapshotHunkDownloadCsv.disabled = false;
@@ -943,6 +980,20 @@ snapshotHunkPrevious.addEventListener('click', () => {
 snapshotHunkNext.addEventListener('click', () => {
   if (snapshotHunkNext.disabled) return;
   snapshotHunkIndex.value = String(Number(snapshotHunkIndex.value) + 1);
+  clearHunkInspection();
+  refreshHunkInspectionControl();
+  openHunkInspection();
+});
+snapshotHunkPagePrevious.addEventListener('click', () => {
+  if (snapshotHunkPagePrevious.disabled) return;
+  snapshotHunkPage.value = String(Number(snapshotHunkPage.value) - 1);
+  clearHunkInspection();
+  refreshHunkInspectionControl();
+  openHunkInspection();
+});
+snapshotHunkPageNext.addEventListener('click', () => {
+  if (snapshotHunkPageNext.disabled) return;
+  snapshotHunkPage.value = String(Number(snapshotHunkPage.value) + 1);
   clearHunkInspection();
   refreshHunkInspectionControl();
   openHunkInspection();
@@ -1044,6 +1095,7 @@ function renderSnapshotComparison() {
   renderSnapshotRawHunkChooser(report);
   clearHunkInspection();
   snapshotHunkIndex.value = '1';
+  snapshotHunkPage.value = '1';
   refreshHunkInspectionControl();
   renderSnapshotComparisonDetails();
 }
@@ -1099,6 +1151,7 @@ snapshotCompareHunk.addEventListener('change', () => {
     snapshotCompareArea.value = editor;
     snapshotHunkEditor.value = editor;
     snapshotHunkIndex.value = index;
+    snapshotHunkPage.value = '1';
     clearHunkInspection();
     refreshHunkInspectionControl();
   }

@@ -4,8 +4,9 @@
  *
  * The same pure aligner is re-run for the selected editor. It may visit
  * all changed rows to count hunks, but stores only 180 rows from the
- * requested hunk. Optional context uses only aligned equal-line pairs,
- * plus shared prefix/suffix boundaries, with at most 5 rows on each side.
+ * requested 1-based page of the hunk. Optional context uses only aligned
+ * equal-line pairs and shared prefix/suffix, at most 5 lines per side.
+ * Context before the hunk is shown on page 1, after it on the last page.
  * Raw editor drafts are never parsed as JSON or executed.
  */
 import { parseWorkspace } from './workspace.js';
@@ -32,7 +33,7 @@ function validateEntry(entry) {
   return parseWorkspace(entry.content);
 }
 export function inspectSnapshotHunk(
-  fromEntry, toEntry, editorId, hunkIndex, contextLines = 3
+  fromEntry, toEntry, editorId, hunkIndex, contextLines = 3, page = 1
 ) {
   if (!Object.hasOwn(EDITORS, editorId)) {
     throw new TypeError('Choose a valid raw editor to inspect.');
@@ -43,6 +44,9 @@ export function inspectSnapshotHunk(
   if (!Number.isSafeInteger(contextLines) ||
       contextLines < 0 || contextLines > MAX_CONTEXT_LINES) {
     throw new RangeError('Context must be from 0 to 5 lines on each side.');
+  }
+  if (!Number.isSafeInteger(page) || page < 1) {
+    throw new RangeError('Hunk preview page must be a positive integer.');
   }
   if (!fromEntry || !toEntry || String(fromEntry.id) === String(toEntry.id)) {
     throw new TypeError('Choose two different workspaces.');
@@ -59,6 +63,9 @@ export function inspectSnapshotHunk(
   while (suffix < min - prefix &&
       left[left.length - 1 - suffix] === right[right.length - 1 - suffix]) suffix++;
   const changedDetails = [];
+  // The requested page offset counts *changed rows in this hunk*, not
+  // original source line numbers. No earlier page's text is retained.
+  const offset = (page - 1) * MAX_HUNK_ROWS;
   const beforeContext = [];
   const afterContext = [];
   const toContextRow = (fromLine, toLine, text) => ({
@@ -83,7 +90,7 @@ export function inspectSnapshotHunk(
   };
   const alignment = alignRawLineChanges(left, right, prefix, suffix, line => {
     if (line.hunk_index !== hunkIndex) return;
-    summary.total_rows++;
+    const rowOffset = summary.total_rows++;
     summary[line.change_type]++;
     if (line.from_line !== null) {
       if (summary.from_start === null) summary.from_start = line.from_line;
@@ -93,7 +100,7 @@ export function inspectSnapshotHunk(
       if (summary.to_start === null) summary.to_start = line.to_line;
       summary.to_end = line.to_line;
     }
-    if (changedDetails.length >= MAX_HUNK_ROWS) return;
+    if (rowOffset < offset || rowOffset >= offset + MAX_HUNK_ROWS) return;
     changedDetails.push({
       hunk_index: hunkIndex,
       change_type: line.change_type,
@@ -123,6 +130,11 @@ export function inspectSnapshotHunk(
       EDITORS[editorId].label + '. The editor contains ' + alignment.hunks +
       ' change hunks.');
   }
+  const totalPages = Math.max(1, Math.ceil(summary.total_rows / MAX_HUNK_ROWS));
+  if (page > totalPages) {
+    throw new RangeError('Page ' + page + ' does not exist for hunk ' +
+      hunkIndex + '. There are ' + totalPages + ' pages of changed rows.');
+  }
   if (contextLines && hunkIndex === alignment.hunks) {
     const start = left.length - suffix;
     for (let i = start;
@@ -133,7 +145,11 @@ export function inspectSnapshotHunk(
   }
   summary.preview_rows = changedDetails.length;
   summary.omitted_rows = summary.total_rows - changedDetails.length;
-  const details = [...beforeContext, ...changedDetails, ...afterContext];
+  // Equal-line context is adjacent to the whole hunk, not to arbitrary
+  // interior page boundaries. Never falsely place it beside a middle page.
+  const shownBefore = page === 1 ? beforeContext : [];
+  const shownAfter = page === totalPages ? afterContext : [];
+  const details = [...shownBefore, ...changedDetails, ...shownAfter];
   return {
     format: 'json-diff-view-hunk-inspection',
     version: 1,
@@ -150,10 +166,19 @@ export function inspectSnapshotHunk(
       shared_suffix_lines: suffix
     },
     summary,
+    window: {
+      page,
+      total_pages: totalPages,
+      first_changed_row: offset + 1,
+      last_changed_row: offset + changedDetails.length,
+      has_previous_page: page > 1,
+      has_next_page: page < totalPages
+    },
     context: {
       requested_lines_each_side: contextLines,
-      before_lines_shown: beforeContext.length,
-      after_lines_shown: afterContext.length
+      before_lines_shown: shownBefore.length,
+      after_lines_shown: shownAfter.length,
+      shown_on_boundary_pages_only: true
     },
     limits: {
       max_changed_preview_rows: MAX_HUNK_ROWS,
@@ -177,7 +202,9 @@ export function serializeHunkInspectionCsv(report) {
     'alignment_strategy','alignment_limited','hunk_rows','omitted_rows',
     'change_type','from_line','to_line','from_present','to_present',
     'from_preview','to_preview','raw_preview_only','patch_not_executed',
-    'context_lines_requested','context_before_rows','context_after_rows'
+    'context_lines_requested','context_before_rows','context_after_rows',
+    'window_page','window_total_pages','window_first_changed_row',
+    'window_last_changed_row'
   ];
   const rows = [header];
   for (const line of report.details) {
@@ -188,7 +215,9 @@ export function serializeHunkInspectionCsv(report) {
       line.to_line ?? '', line.from_present, line.to_present,
       line.from_preview, line.to_preview, true, true,
       report.context.requested_lines_each_side,
-      report.context.before_lines_shown, report.context.after_lines_shown
+      report.context.before_lines_shown, report.context.after_lines_shown,
+      report.window.page, report.window.total_pages,
+      report.window.first_changed_row, report.window.last_changed_row
     ]);
   }
   return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
