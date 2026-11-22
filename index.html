@@ -96,6 +96,7 @@
             <label for="snapshot-compare-to">Later snapshot</label>
             <select id="snapshot-compare-to" disabled></select>
             <button class="button subtle" type="button" id="snapshot-compare-run" disabled>Compare saved drafts</button>
+            <button class="button subtle" type="button" id="snapshot-semantic-run" disabled>Compare JSON structure</button>
           </div>
           <p class="hint" id="snapshot-compare-status" role="status" aria-live="polite">Save at least two snapshots to compare them.</p>
           <div id="snapshot-compare-results" hidden>
@@ -131,6 +132,53 @@
             </div>
             <p class="hint">Up to 180 aligned middle rows per editor and 240 characters per line are recorded. Exports contain these previews only, not full editor data. Filenames and text snippets may be sensitive.</p>
           </div>
+          <section class="snapshot-semantic-results" id="snapshot-semantic-results" aria-labelledby="snapshot-semantic-heading" hidden>
+            <div class="section-heading">
+              <h4 id="snapshot-semantic-heading">Structural JSON changes between saved snapshots</h4>
+              <div class="result-actions">
+                <button class="button subtle" type="button" id="snapshot-semantic-json" disabled>↓ Structural JSON</button>
+                <button class="button subtle" type="button" id="snapshot-semantic-csv" disabled>↓ Structural CSV</button>
+              </div>
+            </div>
+            <p class="hint">Each editor is parsed independently. Invalid or blank JSON prevents structural comparison only for that editor. JSON Patch contents are compared as JSON data, never run. Report values are preview-only and capped.</p>
+            <p id="snapshot-semantic-summary" role="status" aria-live="polite"></p>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Editor</th><th scope="col">Parse status</th><th scope="col">Recorded changes</th><th scope="col">Preview rows</th></tr></thead>
+                <tbody id="snapshot-semantic-sections"></tbody>
+              </table>
+            </div>
+            <div class="snapshot-semantic-filters" role="group" aria-label="Filter snapshot structural changes">
+              <label for="snapshot-semantic-editor">Editor</label>
+              <select id="snapshot-semantic-editor">
+                <option value="all">All editors</option>
+                <option value="before">Before</option>
+                <option value="after">After</option>
+                <option value="patch">JSON Patch as data</option>
+              </select>
+              <label for="snapshot-semantic-type">Change type</label>
+              <select id="snapshot-semantic-type">
+                <option value="all">All changes</option>
+                <option value="added">Added</option>
+                <option value="removed">Removed</option>
+                <option value="changed">Changed</option>
+              </select>
+              <label for="snapshot-semantic-path">Path contains</label>
+              <input id="snapshot-semantic-path" type="search" placeholder="e.g. $.settings" autocomplete="off">
+            </div>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Editor</th><th scope="col">Type</th><th scope="col">Path preview</th><th scope="col">Earlier value preview</th><th scope="col">Later value preview</th></tr></thead>
+                <tbody id="snapshot-semantic-rows"></tbody>
+              </table>
+            </div>
+            <nav class="results-nav" id="snapshot-semantic-nav" aria-label="Structural comparison preview pages" hidden>
+              <button class="button subtle" type="button" id="snapshot-semantic-prev">Previous page</button>
+              <span id="snapshot-semantic-page-info" aria-live="polite"></span>
+              <button class="button subtle" type="button" id="snapshot-semantic-next">Next page</button>
+            </nav>
+            <p class="hint">Up to 250 recorded changes per editor, with 240-character value previews and 300-character path previews. The underlying engine stops at 5,000 changes, 100,000 visited values or depth 200. Exports omit complete source values; snippets may still be sensitive.</p>
+          </section>
         </section>
         <div class="workspace-collection-actions" role="group" aria-label="Export or import a collection of snapshots">
           <button class="button subtle" type="button" id="workspace-collection-export" disabled>↓ Download all snapshots</button>

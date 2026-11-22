@@ -12,6 +12,10 @@ import {
   serializeSnapshotComparisonCsv
 } from './snapshot-compare.js';
 import {
+  compareSnapshotJsonStructures, serializeSnapshotStructuralJson,
+  serializeSnapshotStructuralCsv
+} from './snapshot-semantic.js';
+import {
   serializeSnapshotCollection, parseSnapshotCollection, MAX_COLLECTION_BYTES
 } from './snapshot-collection.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
@@ -55,6 +59,20 @@ const snapshotCompareArea = document.querySelector('#snapshot-compare-area');
 const snapshotCompareRows = document.querySelector('#snapshot-compare-rows');
 const snapshotCompareJson = document.querySelector('#snapshot-compare-json');
 const snapshotCompareCsv = document.querySelector('#snapshot-compare-csv');
+const snapshotSemanticRun = document.querySelector('#snapshot-semantic-run');
+const snapshotSemanticPanel = document.querySelector('#snapshot-semantic-results');
+const snapshotSemanticSummary = document.querySelector('#snapshot-semantic-summary');
+const snapshotSemanticSections = document.querySelector('#snapshot-semantic-sections');
+const snapshotSemanticEditor = document.querySelector('#snapshot-semantic-editor');
+const snapshotSemanticType = document.querySelector('#snapshot-semantic-type');
+const snapshotSemanticPath = document.querySelector('#snapshot-semantic-path');
+const snapshotSemanticRows = document.querySelector('#snapshot-semantic-rows');
+const snapshotSemanticNav = document.querySelector('#snapshot-semantic-nav');
+const snapshotSemanticPrevious = document.querySelector('#snapshot-semantic-prev');
+const snapshotSemanticNext = document.querySelector('#snapshot-semantic-next');
+const snapshotSemanticPageInfo = document.querySelector('#snapshot-semantic-page-info');
+const snapshotSemanticJson = document.querySelector('#snapshot-semantic-json');
+const snapshotSemanticCsv = document.querySelector('#snapshot-semantic-csv');
 const workspaceCollectionExport = document.querySelector('#workspace-collection-export');
 const workspaceCollectionImport = document.querySelector('#workspace-collection-import');
 const workspaceCollectionFile = document.querySelector('#workspace-collection-file');
@@ -320,6 +338,8 @@ let stagedCollection = null;
 let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
 let latestSnapshotComparison = null;
+let latestSnapshotStructuralComparison = null;
+let snapshotSemanticPage = 0;
 let latestInspection = null;
 let inspectionPage = 0;
 let latestStep = null;
@@ -534,6 +554,156 @@ workspaceCancelButton.addEventListener('click', () => {
 function selectedSessionSnapshot() {
   return sessionSnapshots.read(workspaceSnapshotSelect.value);
 }
+const SNAPSHOT_SEMANTIC_PAGE_SIZE = 75;
+function invalidateSnapshotSemanticComparison() {
+  latestSnapshotStructuralComparison = null;
+  snapshotSemanticPage = 0;
+  snapshotSemanticPanel.hidden = true;
+  snapshotSemanticSummary.textContent = '';
+  snapshotSemanticSections.replaceChildren();
+  snapshotSemanticRows.replaceChildren();
+  snapshotSemanticNav.hidden = true;
+  snapshotSemanticJson.disabled = true;
+  snapshotSemanticCsv.disabled = true;
+}
+function renderSnapshotSemanticRows() {
+  const report = latestSnapshotStructuralComparison;
+  if (!report) return;
+  const area = snapshotSemanticEditor.value;
+  const type = snapshotSemanticType.value;
+  const needle = snapshotSemanticPath.value.trim().toLocaleLowerCase();
+  const matching = report.details.filter(item =>
+    (area === 'all' || item.section === area) &&
+    (type === 'all' || item.type === type) &&
+    (!needle || item.path.toLocaleLowerCase().includes(needle))
+  );
+  const pages = Math.max(1, Math.ceil(matching.length / SNAPSHOT_SEMANTIC_PAGE_SIZE));
+  snapshotSemanticPage = Math.min(snapshotSemanticPage, pages - 1);
+  const from = snapshotSemanticPage * SNAPSHOT_SEMANTIC_PAGE_SIZE;
+  const visible = matching.slice(from, from + SNAPSHOT_SEMANTIC_PAGE_SIZE);
+  const fragment = document.createDocumentFragment();
+  if (!visible.length) {
+    const row = document.createElement('tr');
+    const empty = cell('td', 'No recorded structural changes match these filters.', 'empty');
+    empty.colSpan = 5;
+    row.append(empty);
+    fragment.append(row);
+  } else for (const item of visible) {
+    const row = document.createElement('tr');
+    for (const value of [
+      item.section,
+      item.type,
+      item.path + (item.path_truncated ? ' [path shortened]' : ''),
+      item.before_present ? item.before_preview : '(not present)',
+      item.after_present ? item.after_preview : '(not present)'
+    ]) row.append(cell('td', value));
+    fragment.append(row);
+  }
+  snapshotSemanticRows.replaceChildren(fragment);
+  snapshotSemanticNav.hidden = pages <= 1;
+  snapshotSemanticPrevious.disabled = snapshotSemanticPage === 0;
+  snapshotSemanticNext.disabled = snapshotSemanticPage + 1 >= pages;
+  snapshotSemanticPageInfo.textContent = matching.length +
+    ' of ' + report.details.length + ' preview rows match the filters · page ' +
+    (snapshotSemanticPage + 1) + '/' + pages + '.';
+}
+function renderSnapshotSemanticComparison() {
+  const report = latestSnapshotStructuralComparison;
+  if (!report) return;
+  snapshotSemanticPanel.hidden = false;
+  snapshotSemanticSummary.textContent =
+    'READ-ONLY STRUCTURAL JSON COMPARISON. ' +
+    report.summary.editors_compared + ' of 3 editors compared; ' +
+    report.summary.editors_unavailable + ' could not be compared; ' +
+    report.summary.recorded_changes + ' differences recorded, ' +
+    report.summary.shown_rows + ' preview rows, ' +
+    report.summary.omitted_recorded_rows + ' omitted recorded rows, ' +
+    report.summary.truncated_reports + ' truncated structural reports. ' +
+    'Counts on truncated reports are lower bounds. JSON Patch text is treated ' +
+    'only as data; no patch was executed or editor modified.';
+  const fragment = document.createDocumentFragment();
+  for (const section of report.sections) {
+    const row = document.createElement('tr');
+    let explanation = section.status === 'compared' ?
+      'Earlier and later JSON valid' :
+      'Earlier: ' + section.earlier_status + '; later: ' + section.later_status;
+    if (section.error) explanation += ' — ' + section.error;
+    else if (section.earlier_error || section.later_error) explanation +=
+      ' — ' + (section.earlier_error || section.later_error);
+    const counts = section.status === 'compared' ?
+      section.counts.added + ' added · ' + section.counts.removed +
+      ' removed · ' + section.counts.changed + ' changed' +
+      (section.report_truncated ? ' (truncated)' : '') : 'Not compared';
+    for (const value of [
+      section.label, explanation, counts,
+      section.shown_rows + (section.omitted_rows ?
+        ' (+' + section.omitted_rows + ' omitted)' : '')
+    ]) row.append(cell('td', String(value)));
+    fragment.append(row);
+  }
+  snapshotSemanticSections.replaceChildren(fragment);
+  snapshotSemanticPage = 0;
+  renderSnapshotSemanticRows();
+}
+for (const control of [snapshotSemanticEditor, snapshotSemanticType]) {
+  control.addEventListener('change', () => {
+    snapshotSemanticPage = 0;
+    renderSnapshotSemanticRows();
+  });
+}
+snapshotSemanticPath.addEventListener('input', () => {
+  snapshotSemanticPage = 0;
+  renderSnapshotSemanticRows();
+});
+snapshotSemanticPrevious.addEventListener('click', () => {
+  if (snapshotSemanticPage === 0) return;
+  snapshotSemanticPage--;
+  renderSnapshotSemanticRows();
+});
+snapshotSemanticNext.addEventListener('click', () => {
+  if (!latestSnapshotStructuralComparison) return;
+  snapshotSemanticPage++;
+  renderSnapshotSemanticRows();
+});
+snapshotSemanticRun.addEventListener('click', () => {
+  const first = sessionSnapshots.read(snapshotCompareFrom.value);
+  const second = sessionSnapshots.read(snapshotCompareTo.value);
+  if (!first || !second || first.id === second.id) return;
+  try {
+    latestSnapshotStructuralComparison = compareSnapshotJsonStructures(first, second);
+    renderSnapshotSemanticComparison();
+    snapshotSemanticJson.disabled = false;
+    snapshotSemanticCsv.disabled = false;
+    snapshotCompareMessage('Structural JSON comparison ready. Invalid drafts are reported separately.');
+  } catch (error) {
+    invalidateSnapshotSemanticComparison();
+    snapshotCompareMessage('Structural comparison failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotSemanticJson.addEventListener('click', () => {
+  if (!latestSnapshotStructuralComparison) return;
+  try {
+    downloadReport(serializeSnapshotStructuralJson(latestSnapshotStructuralComparison),
+      'snapshot-structural-comparison.json', 'application/json;charset=utf-8');
+    snapshotCompareMessage('Structural comparison JSON download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('Structural JSON export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotSemanticCsv.addEventListener('click', () => {
+  if (!latestSnapshotStructuralComparison) return;
+  try {
+    downloadReport(serializeSnapshotStructuralCsv(latestSnapshotStructuralComparison),
+      'snapshot-structural-comparison.csv', 'text/csv;charset=utf-8');
+    snapshotCompareMessage('Structural comparison CSV download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('Structural CSV export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
 function invalidateSessionSnapshotComparison() {
   latestSnapshotComparison = null;
   snapshotCompareResults.hidden = true;
@@ -542,6 +712,7 @@ function invalidateSessionSnapshotComparison() {
   snapshotCompareRows.replaceChildren();
   snapshotCompareJson.disabled = true;
   snapshotCompareCsv.disabled = true;
+  invalidateSnapshotSemanticComparison();
 }
 function populateSnapshotCompareSelects(items) {
   const earlier = snapshotCompareFrom.value;
@@ -567,6 +738,7 @@ function refreshSnapshotCompareAction() {
   const a = sessionSnapshots.read(snapshotCompareFrom.value);
   const b = sessionSnapshots.read(snapshotCompareTo.value);
   snapshotCompareRun.disabled = !a || !b || a.id === b.id;
+  snapshotSemanticRun.disabled = snapshotCompareRun.disabled;
 }
 function snapshotCompareMessage(message, error = false) {
   snapshotCompareStatus.textContent = message;
