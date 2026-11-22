@@ -45,6 +45,12 @@ Use **Open workspace** to stage a local file for **review before restore**. The 
   
 Restore **never parses or validates the editor JSON**, executes a JSON Patch, automatically compares documents, uploads a file or sends data to a server. The outer workspace schema and option types are validated, with an **8 MiB** file limit and **2 MiB per editor**. After a confirmed selective restore, stale comparison and patch previews are cleared; re-run Compare JSON or Preview applying patch only when ready.
 
+### Recoverable pre-restore backups
+
+During **Review workspace restore**, **Download complete current-workspace backup before applying** is selected by default. When the user confirms a restore with that option enabled, the app first initiates a local download of the complete original workspace as `json-diff-view-before-restore.json`, **before** replacing any selected fields. If preparing that backup fails the restore is canceled without modifying editors. **Back up current workspace now** lets the user export the same pre-restore snapshot independently of applying a restore. The file uses the normal `json-diff-view-workspace` v1 schema and preserves every raw editor draft and option, including sections not selected for replacement.
+
+This file can later be reopened via **Open workspace** after a browser reload, unlike the one-step memory-only **Undo restore**. Browser download prompts and restrictions mean an initiated download is **not proof that a file was saved**: check your Downloads folder before relying on recovery. The default backup can be unchecked; no backup is made in that case. Backups remain local, contain potentially sensitive editor data, and are never uploaded.
+
 Workspace files can contain sensitive editor contents and should be stored and shared accordingly. This is a manual local save/restore feature, not autosave or cloud synchronization.
 
 ## Open locally

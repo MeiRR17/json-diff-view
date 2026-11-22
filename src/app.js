@@ -35,6 +35,8 @@ const workspaceRestorePatch = document.querySelector('#workspace-restore-patch')
 const workspaceRestoreOptions = document.querySelector('#workspace-restore-options');
 const workspaceApplyButton = document.querySelector('#apply-workspace');
 const workspaceCancelButton = document.querySelector('#cancel-workspace');
+const workspaceBackupButton = document.querySelector('#download-pre-restore-workspace');
+const workspaceAutoBackup = document.querySelector('#workspace-backup-before-apply');
 const afterEditor = document.querySelector('#after');
 const status = document.querySelector('#status');
 const summary = document.querySelector('#summary');
@@ -364,6 +366,7 @@ function clearWorkspaceStaging() {
   workspacePreviewSummary.textContent = '';
   workspacePreviewRows.replaceChildren();
   workspaceApplyButton.disabled = true;
+  workspaceBackupButton.disabled = true;
 }
 function discardWorkspaceStaging(message = '') {
   workspaceImportSequence++;
@@ -421,6 +424,7 @@ function refreshWorkspacePreview() {
   }
   workspacePreviewRows.replaceChildren(fragment);
   workspaceApplyButton.disabled = selected === 0;
+  workspaceBackupButton.disabled = false;
   workspacePreviewSummary.textContent =
     'Loaded local file “' + name + '”. ' + selected +
     ' of 4 sections selected (' + changed +
@@ -431,6 +435,7 @@ function stageWorkspace(values, name, snapshot) {
   clearWorkspaceStaging();
   stagedWorkspace = { values, name, snapshot };
   for (const section of workspaceSections) section.checkbox.checked = true;
+  workspaceAutoBackup.checked = true;
   workspacePreview.hidden = false;
   refreshWorkspacePreview();
 }
@@ -479,6 +484,32 @@ workspaceFile.addEventListener('change', event => {
 });
 workspaceCancelButton.addEventListener('click', () => {
   discardWorkspaceStaging('Workspace restore canceled. No editor was modified.');
+});
+function stagedWorkspaceIsCurrent(staged) {
+  return !!staged && staged === stagedWorkspace &&
+    !workspaceChanged(staged.snapshot, currentWorkspaceValues());
+}
+function downloadPreRestoreWorkspace(staged) {
+  // A complete, portable v1 file: both unselected and selected editor drafts
+  // are captured, so restoring it later can recover the entire prior session.
+  const serialized = serializeWorkspace(staged.snapshot);
+  downloadReport(serialized, 'json-diff-view-before-restore.json',
+    'application/json;charset=utf-8');
+}
+workspaceBackupButton.addEventListener('click', () => {
+  const staged = stagedWorkspace;
+  if (!stagedWorkspaceIsCurrent(staged)) {
+    discardWorkspaceStaging('Current contents changed. Reopen the saved workspace before backing up.');
+    return;
+  }
+  try {
+    downloadPreRestoreWorkspace(staged);
+    workspaceMessage('Pre-restore workspace backup download initiated. ' +
+      'Check your browser downloads before restoring.');
+  } catch (error) {
+    workspaceMessage('Could not prepare pre-restore backup: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
 });
 async function importWorkspace(file) {
   discardWorkspaceStaging();
@@ -538,13 +569,29 @@ workspaceApplyButton.addEventListener('click', () => {
   }
   if (!confirm('Restore ' + changes.map(section => section.name).join(', ') +
       '? Only checked sections will be replaced; unsaved changes in those ' +
-      'sections will be lost. No JSON comparison or patch execution will run.')) {
+      'sections will be lost.' +
+      (workspaceAutoBackup.checked ?
+        ' A local backup download of the current complete workspace will be initiated first.' : '') +
+      ' No JSON comparison or patch execution will run.')) {
     workspaceMessage('Restore not applied. Change your selection or cancel.');
     return;
   }
   if (workspaceChanged(staged.snapshot, currentWorkspaceValues())) {
     discardWorkspaceStaging('Current values changed before restore. Open the file again.');
     return;
+  }
+  // Export the full pre-restore workspace BEFORE overwriting any field.
+  // Failure to serialize or initiate the download aborts the operation.
+  // Browser download settings ultimately control whether a file is saved.
+  const backupRequested = workspaceAutoBackup.checked;
+  if (backupRequested) {
+    try {
+      downloadPreRestoreWorkspace(staged);
+    } catch (error) {
+      workspaceMessage('Restore canceled: backup could not be prepared. ' +
+        (error instanceof Error ? error.message : 'unknown error'), true);
+      return;
+    }
   }
   // Capture exact changed keys before replacing editor values. Unchecked
   // sections and identical fields must never be part of undo.
@@ -585,6 +632,7 @@ workspaceApplyButton.addEventListener('click', () => {
   workspaceUndoButton.disabled = false;
   workspaceUndoButton.title = 'Revert the last restored fields only; unrelated edits are preserved.';
   workspaceMessage('Selected workspace sections restored. Other sections were preserved. ' +
+    (backupRequested ? 'Pre-restore backup download initiated; verify it in your Downloads folder. ' : '') +
     'Undo restore is available until any restored field changes. ' +
     'No JSON was parsed and no patch was executed.');
 });

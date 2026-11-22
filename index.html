@@ -56,7 +56,7 @@
         <button class="button subtle" type="button" id="undo-workspace-restore" disabled
           title="Available after a workspace restore changes editor content or settings.">Undo restore</button>
         <input id="workspace-file" type="file" accept=".json,application/json" hidden>
-        <span class="hint">Includes three raw editor drafts and patch/range settings. Opening a workspace previews the changes; you choose which sections to restore. Undo restore can revert the last confirmed replacement without touching unrelated edits.</span>
+        <span class="hint">Includes three raw editor drafts and patch/range settings. Opening a workspace previews the changes; you choose which sections to restore. Undo restore can revert the last confirmed replacement without touching unrelated edits; download a pre-restore backup to preserve recovery across reloads.</span>
       </div>
       <p id="workspace-status" class="hint" role="status" aria-live="polite">Select a saved workspace file to preview and restore chosen sections.</p>
       <section class="workspace-preview" id="workspace-preview" aria-labelledby="workspace-preview-heading" hidden>
@@ -74,6 +74,14 @@
             <thead><tr><th scope="col">Section</th><th scope="col">Current → saved</th><th scope="col">Impact</th></tr></thead>
             <tbody id="workspace-preview-rows"></tbody>
           </table>
+        </div>
+        <div class="workspace-backup-controls">
+          <label for="workspace-backup-before-apply">
+            <input id="workspace-backup-before-apply" type="checkbox" checked>
+            Download complete current-workspace backup before applying (recommended)
+          </label>
+          <button class="button subtle" type="button" id="download-pre-restore-workspace" disabled>↓ Back up current workspace now</button>
+          <p class="hint">The backup includes all three raw editor drafts and settings, even unchecked sections. It can be reopened after a reload using Open workspace. Your browser controls whether downloads are saved; check Downloads before relying on the file.</p>
         </div>
         <div class="workspace-preview-actions">
           <button class="button primary" type="button" id="apply-workspace" disabled>Apply selected sections</button>
