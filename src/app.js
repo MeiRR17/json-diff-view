@@ -5,6 +5,7 @@ import { serializeReportJson, serializeReportCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
+import { serializeWorkspace, parseWorkspace } from './workspace.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
 import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
 import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
@@ -20,6 +21,10 @@ const PAGE_SIZE = 100;
 const MAX_REPORT_EXPORT_BYTES = 8 * 1024 * 1024;
 
 const beforeEditor = document.querySelector('#before');
+const workspaceSaveButton = document.querySelector('#download-workspace');
+const workspaceOpenButton = document.querySelector('#import-workspace');
+const workspaceFile = document.querySelector('#workspace-file');
+const workspaceStatus = document.querySelector('#workspace-status');
 const afterEditor = document.querySelector('#after');
 const status = document.querySelector('#status');
 const summary = document.querySelector('#summary');
@@ -256,6 +261,7 @@ let latestImpact = null;
 let impactPage = 0;
 let patchImportSequence = 0;
 let bundleImportSequence = 0;
+let workspaceImportSequence = 0;
 let latestInspection = null;
 let inspectionPage = 0;
 let latestStep = null;
@@ -275,6 +281,117 @@ function invalidateAllEditorImports() {
 function setStatus(message, isError = false) {
   status.textContent = message;
   status.classList.toggle('error', isError);
+}
+
+// Snapshot plain text and option controls: neither saving nor importing a
+// workspace parses, compares or executes its embedded editor drafts.
+function currentWorkspaceValues() {
+  return {
+    beforeText: beforeEditor.value,
+    afterText: afterEditor.value,
+    patchText: patchSource.value,
+    patchBase: patchBase.value,
+    patchDirection: patchDirection.value,
+    guardPatch: guardPatchCheckbox.checked,
+    guardRangePatch: guardRangePatchCheckbox.checked,
+    rangeStart: rangeStartInput.value,
+    rangeEnd: rangeEndInput.value,
+    stepCount: stepCountInput.value
+  };
+}
+function workspaceChanged(a, b) {
+  return Object.keys(a).some(key => a[key] !== b[key]);
+}
+function workspaceMessage(message, error = false) {
+  workspaceStatus.textContent = message;
+  workspaceStatus.classList.toggle('error', error);
+}
+// Any user input during a pending file read cancels that import, including
+// edit-and-revert sequences that end with identical text.
+for (const field of [beforeEditor, afterEditor, patchSource,
+  rangeStartInput, rangeEndInput, stepCountInput]) {
+  field.addEventListener('input', () => { workspaceImportSequence++; });
+}
+for (const control of [patchBase, patchDirection, guardPatchCheckbox,
+  guardRangePatchCheckbox]) {
+  control.addEventListener('change', () => { workspaceImportSequence++; });
+}
+workspaceSaveButton.addEventListener('click', () => {
+  try {
+    const contents = serializeWorkspace(currentWorkspaceValues());
+    downloadReport(contents, 'json-diff-view-workspace.json',
+      'application/json;charset=utf-8');
+    workspaceMessage('Workspace saved locally with raw editor drafts and patch options.');
+  } catch (error) {
+    workspaceMessage('Could not save workspace: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+workspaceOpenButton.addEventListener('click', () => workspaceFile.click());
+workspaceFile.addEventListener('change', event => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (file) void importWorkspace(file);
+});
+async function importWorkspace(file) {
+  if (file.size > MAX_REPORT_EXPORT_BYTES) {
+    workspaceMessage('Workspace file exceeds the 8 MiB limit.', true);
+    return;
+  }
+  const request = ++workspaceImportSequence;
+  // The selected workspace supersedes outstanding source, patch and
+  // checkpoint/failure imports; later imports also supersede this request.
+  invalidateAllEditorImports();
+  const beforeVersion = editorImportVersions.get(beforeEditor);
+  const afterVersion = editorImportVersions.get(afterEditor);
+  const patchVersion = ++patchImportSequence;
+  const bundleVersion = ++bundleImportSequence;
+  const initial = currentWorkspaceValues();
+  const current = () => request === workspaceImportSequence &&
+    beforeVersion === editorImportVersions.get(beforeEditor) &&
+    afterVersion === editorImportVersions.get(afterEditor) &&
+    patchVersion === patchImportSequence &&
+    bundleVersion === bundleImportSequence &&
+    !workspaceChanged(initial, currentWorkspaceValues());
+  workspaceMessage('Reading workspace from local file. No JSON or patch is executed.');
+  try {
+    const text = await file.text();
+    if (!current()) return;
+    const restored = parseWorkspace(text);
+    // This file controls three editors and several options. Require explicit
+    // approval even when there is no existing editor content.
+    if (!confirm('Restore this workspace? This will replace Before, After, ' +
+      'the patch text and patch/range settings. Unsaved edits will be lost. ' +
+      'No comparison or patch will run automatically.')) {
+      workspaceMessage('Workspace import canceled; editors were not changed.');
+      return;
+    }
+    if (!current()) return;
+    invalidateAllEditorImports();
+    patchImportSequence++;
+    bundleImportSequence++;
+    beforeEditor.value = restored.beforeText;
+    afterEditor.value = restored.afterText;
+    patchSource.value = restored.patchText;
+    patchBase.value = restored.patchBase;
+    patchDirection.value = restored.patchDirection;
+    guardPatchCheckbox.checked = restored.guardPatch;
+    guardRangePatchCheckbox.checked = restored.guardRangePatch;
+    rangeStartInput.value = restored.rangeStart;
+    rangeEndInput.value = restored.rangeEnd;
+    stepCountInput.value = restored.stepCount;
+    invalidateInspection();
+    resetReport();
+    invalidateImportedFailure('Workspace restored. Import a failure bundle to verify one.');
+    updateResultTarget();
+    setStatus('Workspace restored. Select Compare JSON to process the editor drafts.');
+    patchMessage('Raw patch text restored. Select Preview applying patch to run it explicitly.');
+    workspaceMessage('Workspace restored locally. Drafts and settings preserved; ' +
+      'no JSON was parsed and no patch was executed.');
+  } catch (error) {
+    if (current()) workspaceMessage('Could not open workspace: ' +
+      (error instanceof Error ? error.message : 'invalid workspace'), true);
+  }
 }
 
 function fitInput(source, label) {
@@ -2794,7 +2911,9 @@ failureDownloadButton.addEventListener('click', () => {
   }
 });
 function failureReproduction(failure) {
-  if (failure.lastGood === null) {
+  // A successful root checkpoint can legitimately be JSON null. The
+  // serialized checkpoint string is the availability sentinel.
+  if (failure.json === null) {
     throw new Error('Last successful checkpoint is unavailable.');
   }
   return serializeFailureBundle({

@@ -398,3 +398,11 @@ a{color:#155a98}
 .evidence-case-progression td .button{font-size:.8rem;white-space:nowrap}
 @media(max-width:700px){.evidence-case-progression .section-heading .button{width:100%}}
 @media(prefers-color-scheme:dark){.evidence-case-progression{border-color:#3b5068}#evidence-case-progression-summary{color:#b6cce3}}
+
+/* Complete raw editing workspace import/export, separate from patch bundles. */
+.workspace-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 7px}
+.workspace-actions .hint{flex:1 1 250px;overflow-wrap:anywhere}
+#workspace-status{margin:6px 0 14px;overflow-wrap:anywhere}
+#workspace-status.error{color:#923d22;font-weight:650}
+@media(max-width:700px){.workspace-actions .button{flex:1 1 150px}}
+@media(prefers-color-scheme:dark){#workspace-status.error{color:#ffb6a0}}

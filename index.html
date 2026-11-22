@@ -50,6 +50,13 @@
         <button class="button" type="button" id="clear">Clear</button>
         <span class="shortcut">Tip: Ctrl/⌘ + Enter to compare</span>
       </div>
+      <div class="workspace-actions" role="group" aria-label="Save or restore all editor drafts">
+        <button class="button subtle" type="button" id="download-workspace">↓ Save workspace</button>
+        <button class="button subtle" type="button" id="import-workspace">↑ Open workspace</button>
+        <input id="workspace-file" type="file" accept=".json,application/json" hidden>
+        <span class="hint">Includes all three raw editor drafts and patch/range settings. No JSON is validated or patch executed on restore.</span>
+      </div>
+      <p id="workspace-status" class="hint" role="status" aria-live="polite">Save your current workspace as a local JSON file; restoring requires confirmation.</p>
       <p id="status" class="status" aria-live="polite" role="status">Paste two JSON documents or load a sample to begin.</p>
     </section>
     <section id="results" aria-labelledby="results-heading">

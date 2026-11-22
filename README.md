@@ -37,6 +37,14 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 - Keyboard shortcut: **Ctrl+Enter** (Windows/Linux) or **⌘+Enter** (macOS).
 - Responsive layout with keyboard-accessible controls, light and dark themes.
 
+## Portable editing workspace
+
+Use **Save workspace** to download a versioned `json-diff-view-workspace` v1 JSON file. Unlike checkpoint bundles, this preserves the exact **raw text** of the Before, After and JSON Patch editors, including incomplete or invalid JSON drafts. It also saves the selected patch source, forward/reverse patch direction, both guard settings and the step/range inputs. Generated reports, execution results, imported forensic archives and private browser state are not included.
+
+Use **Open workspace** to restore those drafts and settings after an explicit overwrite confirmation. Restore **never parses or validates the editor JSON**, executes a JSON Patch, automatically compares documents, uploads a file or sends data to a server. The outer workspace schema and option types are validated, with an **8 MiB** file limit and **2 MiB per editor**. Pending source/patch/bundle imports are invalidated, and stale comparison and patch previews are cleared. Re-run Compare JSON or Preview applying patch only when ready.
+
+Workspace files can contain sensitive editor contents and should be stored and shared accordingly. This is a manual local save/restore feature, not autosave or cloud synchronization.
+
 ## Open locally
 
 Open [index.html](index.html) in a modern browser, or serve this folder over HTTP:
