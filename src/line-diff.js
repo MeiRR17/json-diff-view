@@ -7,13 +7,15 @@
  * Large regions fall back to index alignment and are explicitly labeled.
  * Every maximal adjacent run of changed records is numbered as a hunk;
  * an exactly equal aligned line always starts a new region afterward.
+ * An optional onEqual callback exposes the two actual matched line numbers
+ * to read-only context inspectors without constructing more diff rows.
  *
  * This is NOT JSON parsing, patch generation or an executed operation.
  */
 export const MAX_LINE_LCS_CELLS = 400000;
 export const MAX_LINE_LCS_AXIS = 1000;
 
-export function alignRawLineChanges(left, right, prefix, suffix, emit) {
+export function alignRawLineChanges(left, right, prefix, suffix, emit, onEqual = null) {
   const leftSize = left.length - prefix - suffix;
   const rightSize = right.length - prefix - suffix;
   const useLcs = leftSize <= MAX_LINE_LCS_AXIS &&
@@ -58,6 +60,11 @@ export function alignRawLineChanges(left, right, prefix, suffix, emit) {
       const b = i < rightSize ? i : null;
       if (a !== null && b !== null &&
           left[prefix + a] === right[prefix + b]) {
+        if (onEqual) onEqual({
+          after_hunk_index: hunks,
+          from_line: prefix + a + 1, to_line: prefix + b + 1,
+          text: left[prefix + a]
+        });
         insideHunk = false;
         continue;
       }
@@ -96,6 +103,11 @@ export function alignRawLineChanges(left, right, prefix, suffix, emit) {
     if (i < leftSize && j < rightSize &&
         left[prefix + i] === right[prefix + j]) {
       flush();
+      if (onEqual) onEqual({
+        after_hunk_index: hunks,
+        from_line: prefix + i + 1, to_line: prefix + j + 1,
+        text: left[prefix + i]
+      });
       insideHunk = false;
       i++;
       j++;

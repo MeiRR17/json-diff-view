@@ -64,6 +64,9 @@ const snapshotCompareHunk = document.querySelector('#snapshot-compare-hunk');
 const snapshotCompareHunkSummary = document.querySelector('#snapshot-compare-hunk-summary');
 const snapshotHunkEditor = document.querySelector('#snapshot-hunk-editor');
 const snapshotHunkIndex = document.querySelector('#snapshot-hunk-index');
+const snapshotHunkContext = document.querySelector('#snapshot-hunk-context');
+const snapshotHunkPrevious = document.querySelector('#snapshot-hunk-previous');
+const snapshotHunkNext = document.querySelector('#snapshot-hunk-next');
 const snapshotHunkOpen = document.querySelector('#snapshot-hunk-open');
 const snapshotHunkInspection = document.querySelector('#snapshot-hunk-inspection');
 const snapshotHunkInspectionSummary = document.querySelector('#snapshot-hunk-inspection-summary');
@@ -790,6 +793,8 @@ function invalidateRawSnapshotComparison() {
   snapshotCompareHunkSummary.textContent = '';
   snapshotCompareHunk.disabled = true;
   snapshotHunkOpen.disabled = true;
+  snapshotHunkPrevious.disabled = true;
+  snapshotHunkNext.disabled = true;
   snapshotCompareJson.disabled = true;
   snapshotCompareCsv.disabled = true;
 }
@@ -855,6 +860,8 @@ function refreshHunkInspectionControl() {
   snapshotHunkOpen.disabled = !report || !max ||
     !Number.isSafeInteger(n) || n < 1 || n > max ||
     !snapshotHunkIndex.value.trim();
+  snapshotHunkPrevious.disabled = snapshotHunkOpen.disabled || n <= 1;
+  snapshotHunkNext.disabled = snapshotHunkOpen.disabled || n >= max;
 }
 snapshotHunkEditor.addEventListener('change', () => {
   clearHunkInspection();
@@ -865,7 +872,11 @@ snapshotHunkIndex.addEventListener('input', () => {
   clearHunkInspection();
   refreshHunkInspectionControl();
 });
-snapshotHunkOpen.addEventListener('click', () => {
+snapshotHunkContext.addEventListener('change', () => {
+  clearHunkInspection();
+  refreshHunkInspectionControl();
+});
+function openHunkInspection() {
   if (snapshotHunkOpen.disabled || !latestSnapshotComparison ||
       !ensureLiveSnapshotComparisonFresh('raw')) return;
   try {
@@ -878,7 +889,7 @@ snapshotHunkOpen.addEventListener('click', () => {
       return;
     }
     const result = inspectSnapshotHunk(from, to, snapshotHunkEditor.value,
-      Number(snapshotHunkIndex.value));
+      Number(snapshotHunkIndex.value), Number(snapshotHunkContext.value));
     // Revalidate against current live editors before publishing the result.
     if (!ensureLiveSnapshotComparisonFresh('raw')) return;
     latestHunkInspection = result;
@@ -892,8 +903,10 @@ snapshotHunkOpen.addEventListener('click', () => {
       ', later lines ' + range(h.to_start,h.to_end) + '. ' +
       h.total_rows + ' changed rows (' + h.added + ' added, ' +
       h.removed + ' removed, ' + h.changed + ' changed); ' +
-      h.preview_rows + ' preview rows, ' + h.omitted_rows +
-      ' omitted. Raw text only; no JSON Patch executed.';
+      h.preview_rows + ' changed-line previews, ' + h.omitted_rows +
+      ' omitted; ' + result.context.before_lines_shown +
+      ' context lines before and ' + result.context.after_lines_shown +
+      ' after. Raw text only; no JSON Patch executed.';
     const fragment = document.createDocumentFragment();
     for (const line of result.details) {
       const tr = document.createElement('tr');
@@ -909,6 +922,7 @@ snapshotHunkOpen.addEventListener('click', () => {
     }
     snapshotHunkInspectionRows.replaceChildren(fragment);
     snapshotHunkInspection.hidden = false;
+    refreshHunkInspectionControl();
     snapshotHunkDownloadJson.disabled = false;
     snapshotHunkDownloadCsv.disabled = false;
     snapshotCompareMessage('Hunk inspection generated locally with bounded previews.');
@@ -917,6 +931,21 @@ snapshotHunkOpen.addEventListener('click', () => {
     snapshotCompareMessage('Could not inspect hunk: ' +
       (error instanceof Error ? error.message : 'unknown error'), true);
   }
+}
+snapshotHunkOpen.addEventListener('click', openHunkInspection);
+snapshotHunkPrevious.addEventListener('click', () => {
+  if (snapshotHunkPrevious.disabled) return;
+  snapshotHunkIndex.value = String(Number(snapshotHunkIndex.value) - 1);
+  clearHunkInspection();
+  refreshHunkInspectionControl();
+  openHunkInspection();
+});
+snapshotHunkNext.addEventListener('click', () => {
+  if (snapshotHunkNext.disabled) return;
+  snapshotHunkIndex.value = String(Number(snapshotHunkIndex.value) + 1);
+  clearHunkInspection();
+  refreshHunkInspectionControl();
+  openHunkInspection();
 });
 snapshotHunkDownloadJson.addEventListener('click', () => {
   if (!latestHunkInspection || !ensureLiveSnapshotComparisonFresh('raw')) return;
@@ -1065,7 +1094,14 @@ snapshotCompareArea.addEventListener('change', () => {
 snapshotCompareChangeKind.addEventListener('change', renderSnapshotComparisonDetails);
 snapshotCompareHunk.addEventListener('change', () => {
   const chosen = snapshotCompareHunk.value;
-  if (chosen !== 'all') snapshotCompareArea.value = chosen.split(':')[0];
+  if (chosen !== 'all') {
+    const [editor, index] = chosen.split(':');
+    snapshotCompareArea.value = editor;
+    snapshotHunkEditor.value = editor;
+    snapshotHunkIndex.value = index;
+    clearHunkInspection();
+    refreshHunkInspectionControl();
+  }
   renderSnapshotComparisonDetails();
 });
 snapshotCompareRun.addEventListener('click', () => {

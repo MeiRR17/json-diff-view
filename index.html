@@ -144,7 +144,7 @@
             </div>
             <section class="snapshot-hunk-on-demand" aria-labelledby="snapshot-hunk-inspect-heading">
               <h4 id="snapshot-hunk-inspect-heading">Inspect any change hunk</h4>
-              <p class="hint">Open a numbered hunk beyond the initial 48 summaries or 180 displayed rows. The selected editor is realigned locally only when you request it. No editor will be modified.</p>
+              <p class="hint">Open a numbered hunk beyond the initial 48 summaries or 180 displayed rows. The selected editor is realigned locally when requested; use Previous/Next hunk for consecutive changes and optionally include unchanged context. No editor will be modified.</p>
               <div class="snapshot-hunk-on-demand-controls">
                 <label for="snapshot-hunk-editor">Editor</label>
                 <select id="snapshot-hunk-editor">
@@ -154,7 +154,17 @@
                 </select>
                 <label for="snapshot-hunk-index">Hunk number</label>
                 <input id="snapshot-hunk-index" type="number" min="1" max="1" step="1" value="1">
+                <label for="snapshot-hunk-context">Context lines each side</label>
+                <select id="snapshot-hunk-context">
+                  <option value="0">None</option>
+                  <option value="1">1 line</option>
+                  <option value="2">2 lines</option>
+                  <option value="3" selected>3 lines</option>
+                  <option value="5">5 lines</option>
+                </select>
+                <button class="button subtle" type="button" id="snapshot-hunk-previous" disabled>Previous hunk</button>
                 <button class="button subtle" type="button" id="snapshot-hunk-open" disabled>Inspect hunk</button>
+                <button class="button subtle" type="button" id="snapshot-hunk-next" disabled>Next hunk</button>
               </div>
               <div id="snapshot-hunk-inspection" hidden>
                 <div class="section-heading">
@@ -171,7 +181,7 @@
                     <tbody id="snapshot-hunk-inspection-rows"></tbody>
                   </table>
                 </div>
-                <p class="hint">At most 180 changed rows and 240 characters per line are retained. Exported metadata counts the complete requested hunk even if its preview is truncated; the source drafts are not embedded.</p>
+                <p class="hint">At most 180 changed rows, plus up to 5 unchanged context lines on each side, are retained with 240 characters per line. Context rows come from actual aligned matching lines; changing context regenerates only the selected hunk. Exports contain bounded text snippets and complete hunk counts, never full source drafts.</p>
               </div>
             </section>
             <p class="hint">Changes are grouped into hunks separated by unchanged aligned lines; the selector opens any hunk with retained preview rows. Up to 48 initial hunk summaries and 180 changed-line previews per editor, with 240 characters per line, are recorded. Smaller changed regions use LCS alignment (up to 1,000 lines per side and 400,000 matrix cells); larger regions use a clearly marked positional fallback. Exports contain preview rows and strategy metadata, not complete editor drafts. Line snippets may be sensitive.</p>
