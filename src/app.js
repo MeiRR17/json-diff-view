@@ -1423,6 +1423,8 @@ function openHistoryTransition(index) {
 function setupHistoryCustomPair(files) {
   evidenceHistoryCustomFrom.replaceChildren();
   evidenceHistoryCustomTo.replaceChildren();
+  evidenceHistoryCustomFrom.disabled = false;
+  evidenceHistoryCustomTo.disabled = false;
   for (let i = 0; i < files.length; i++) {
     for (const control of [evidenceHistoryCustomFrom, evidenceHistoryCustomTo]) {
       const option = document.createElement('option');
@@ -1553,6 +1555,8 @@ function invalidateEvidenceHistory() {
   evidenceHistoryPanel.hidden = true;
   evidenceHistoryCustomFrom.replaceChildren();
   evidenceHistoryCustomTo.replaceChildren();
+  evidenceHistoryCustomFrom.disabled = true;
+  evidenceHistoryCustomTo.disabled = true;
   evidenceHistoryCustomRun.disabled = true;
   evidenceHistoryCustomStatus.textContent =
     'Analyze an archive history to select snapshots.';
