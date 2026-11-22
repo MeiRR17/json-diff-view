@@ -22,7 +22,7 @@ export function createSessionSnapshotStore() {
   function read(id) {
     return entries.get(String(id)) ?? null;
   }
-  function add(name, content) {
+  function prepareEntry(name, content) {
     if (typeof name !== 'string' || !name.trim() ||
         name.trim().length > MAX_SNAPSHOT_NAME_LENGTH) {
       throw new TypeError('Snapshot name must be 1–80 characters.');
@@ -34,18 +34,53 @@ export function createSessionSnapshotStore() {
     if (bytes > 8 * 1024 * 1024) {
       throw new RangeError('Snapshot is larger than the 8 MiB workspace limit.');
     }
-    if (entries.size >= MAX_SESSION_SNAPSHOTS) {
-      throw new RangeError('The session already has eight snapshots. Delete one first.');
+    return { name: name.trim(), content, bytes };
+  }
+  function planImport(batch, { replace = false } = {}) {
+    if (!Array.isArray(batch) || batch.length < 1 ||
+        batch.length > MAX_SESSION_SNAPSHOTS) {
+      throw new RangeError('Import 1–8 named workspace snapshots.');
     }
-    if (totalBytes + bytes > MAX_SESSION_SNAPSHOT_BYTES) {
-      throw new RangeError('Session snapshots exceed 24 MiB. Delete an older snapshot.');
+    const incoming = batch.map(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new TypeError('Invalid snapshot entry.');
+      }
+      return prepareEntry(item.name, item.content);
+    });
+    const currentCount = replace ? 0 : entries.size;
+    const currentBytes = replace ? 0 : totalBytes;
+    const combinedCount = currentCount + incoming.length;
+    const combinedBytes = currentBytes + incoming.reduce(
+      (total, item) => total + item.bytes, 0);
+    if (combinedCount > MAX_SESSION_SNAPSHOTS) {
+      throw new RangeError('This import would exceed eight snapshots. ' +
+        'Choose Replace or delete existing snapshots first.');
     }
-    const entry = {
-      id: String(nextId++), name: name.trim(), content, bytes
-    };
-    entries.set(entry.id, entry);
-    totalBytes += bytes;
-    return { id: entry.id, name: entry.name, bytes: entry.bytes };
+    if (combinedBytes > MAX_SESSION_SNAPSHOT_BYTES) {
+      throw new RangeError('This import would exceed 24 MiB in tab memory. ' +
+        'Choose Replace or delete older snapshots first.');
+    }
+    return { incoming, combinedCount, combinedBytes };
+  }
+  function addMany(batch, { replace = false } = {}) {
+    // Entire batch is checked before any mutation. Invalid or oversized
+    // imports never partially delete or insert existing snapshots.
+    const plan = planImport(batch, { replace });
+    if (replace) {
+      entries.clear();
+      totalBytes = 0;
+    }
+    const created = [];
+    for (const item of plan.incoming) {
+      const entry = { id: String(nextId++), ...item };
+      entries.set(entry.id, entry);
+      totalBytes += entry.bytes;
+      created.push({ id: entry.id, name: entry.name, bytes: entry.bytes });
+    }
+    return created;
+  }
+  function add(name, content) {
+    return addMany([{ name, content }])[0];
   }
   function remove(id) {
     const entry = entries.get(String(id));
@@ -58,5 +93,5 @@ export function createSessionSnapshotStore() {
     return { count: entries.size, bytes: totalBytes,
       maxCount: MAX_SESSION_SNAPSHOTS, maxBytes: MAX_SESSION_SNAPSHOT_BYTES };
   }
-  return { list, read, add, remove, usage };
+  return { list, read, add, addMany, planImport, remove, usage };
 }

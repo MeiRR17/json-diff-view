@@ -448,3 +448,11 @@ a{color:#155a98}
 #workspace-snapshot-summary{font-weight:650;font-size:.84rem}
 @media(max-width:700px){.workspace-snapshot-controls{grid-template-columns:1fr}.workspace-snapshot-actions{grid-column:1}.workspace-snapshot-actions .button{flex:1 1 155px}}
 @media(prefers-color-scheme:dark){.workspace-snapshots{border-color:#3b5068}.workspace-snapshot-controls label{color:#b6cce3}.workspace-snapshot-controls input,.workspace-snapshot-controls select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Portable multi-snapshot collection import/export. */
+.workspace-collection-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 10px;padding-top:12px;border-top:1px solid #d8e1ed}
+.workspace-collection-actions label{font-size:.83rem;font-weight:650;color:#3d5471}
+.workspace-collection-actions select{font:inherit;max-width:100%;min-height:38px;padding:8px 10px;background:#fff;color:#18324d;border:1px solid #bdcde0;border-radius:8px}
+.workspace-collection-actions select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+@media(max-width:700px){.workspace-collection-actions>*{flex:1 1 155px}.workspace-collection-actions label{flex:1 1 100%}}
+@media(prefers-color-scheme:dark){.workspace-collection-actions{border-color:#3b5068}.workspace-collection-actions label{color:#b6cce3}.workspace-collection-actions select{color:#e3f1ff;background:#19293b;border-color:#536783}}

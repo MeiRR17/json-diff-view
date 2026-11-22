@@ -7,6 +7,9 @@ import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
 import { serializeWorkspace, parseWorkspace } from './workspace.js';
 import { createSessionSnapshotStore } from './session-snapshots.js';
+import {
+  serializeSnapshotCollection, parseSnapshotCollection, MAX_COLLECTION_BYTES
+} from './snapshot-collection.js';
 import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from './failure-bundle.js';
 import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
 import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
@@ -34,6 +37,10 @@ const workspaceSnapshotPreview = document.querySelector('#workspace-snapshot-pre
 const workspaceSnapshotDownload = document.querySelector('#workspace-snapshot-download');
 const workspaceSnapshotDelete = document.querySelector('#workspace-snapshot-delete');
 const workspaceSnapshotSummary = document.querySelector('#workspace-snapshot-summary');
+const workspaceCollectionExport = document.querySelector('#workspace-collection-export');
+const workspaceCollectionImport = document.querySelector('#workspace-collection-import');
+const workspaceCollectionFile = document.querySelector('#workspace-collection-file');
+const workspaceCollectionMode = document.querySelector('#workspace-collection-mode');
 const workspacePreview = document.querySelector('#workspace-preview');
 const workspacePreviewSummary = document.querySelector('#workspace-preview-summary');
 const workspacePreviewRows = document.querySelector('#workspace-preview-rows');
@@ -283,6 +290,7 @@ let patchImportSequence = 0;
 let bundleImportSequence = 0;
 let workspaceImportSequence = 0;
 const sessionSnapshots = createSessionSnapshotStore();
+let collectionImportGeneration = 0;
 let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
 let latestInspection = null;
@@ -523,6 +531,7 @@ function renderSessionSnapshotControls(preferredId = '') {
   workspaceSnapshotDelete.disabled = !selected;
   const usage = sessionSnapshots.usage();
   workspaceSnapshotSave.disabled = usage.count >= usage.maxCount;
+  workspaceCollectionExport.disabled = usage.count === 0;
   workspaceSnapshotSummary.textContent =
     usage.count + '/' + usage.maxCount + ' manual snapshots · ' +
     formatBytes(usage.bytes) + ' of 24 MiB in tab memory. ' +
@@ -535,6 +544,7 @@ workspaceSnapshotSave.addEventListener('click', () => {
     const name = workspaceSnapshotName.value.trim() ||
       'Snapshot ' + (sessionSnapshots.usage().count + 1);
     const entry = sessionSnapshots.add(name, contents);
+    collectionImportGeneration++;
     renderSessionSnapshotControls(entry.id);
     workspaceMessage('Saved “' + entry.name +
       '” in this tab only. Download it to keep it after a reload.');
@@ -586,9 +596,75 @@ workspaceSnapshotDelete.addEventListener('click', () => {
     discardWorkspaceStaging('Deleted the snapshot that was being previewed.');
   }
   sessionSnapshots.remove(entry.id);
+  collectionImportGeneration++;
   renderSessionSnapshotControls();
   workspaceMessage('Session snapshot deleted. Current editors were not modified.');
 });
+// Session collections are explicit portable files, never automatic storage.
+// A collection import changes *only* named in-tab snapshots, never editors.
+workspaceCollectionExport.addEventListener('click', () => {
+  try {
+    const items = sessionSnapshots.list().map(item => sessionSnapshots.read(item.id));
+    const content = serializeSnapshotCollection(items);
+    downloadReport(content, 'json-diff-view-session-collection.json',
+      'application/json;charset=utf-8');
+    workspaceMessage('Collection export initiated with ' + items.length +
+      ' snapshots. Check your browser Downloads folder.');
+  } catch (error) {
+    workspaceMessage('Could not export snapshot collection: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+workspaceCollectionImport.addEventListener('click', () => workspaceCollectionFile.click());
+workspaceCollectionMode.addEventListener('change', () => { collectionImportGeneration++; });
+workspaceCollectionFile.addEventListener('change', event => {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (file) void importSessionCollection(file);
+});
+async function importSessionCollection(file) {
+  const request = ++collectionImportGeneration;
+  const mode = workspaceCollectionMode.value;
+  if (file.size > MAX_COLLECTION_BYTES) {
+    workspaceMessage('Snapshot collection exceeds the 32 MiB file limit.', true);
+    return;
+  }
+  workspaceMessage('Reading snapshot collection locally. No editors are changed.');
+  try {
+    const text = await file.text();
+    if (request !== collectionImportGeneration || mode !== workspaceCollectionMode.value) return;
+    const items = parseSnapshotCollection(text);
+    const replace = mode === 'replace';
+    const plan = sessionSnapshots.planImport(items, { replace });
+    if (request !== collectionImportGeneration) return;
+    const action = replace ? 'REPLACE all existing session snapshots' :
+      'APPEND to existing session snapshots';
+    if (!confirm('Import ' + items.length + ' named workspace snapshots from “' +
+        file.name + '”? This will ' + action +
+        ', leaving ' + plan.combinedCount + ' snapshots using ' +
+        formatBytes(plan.combinedBytes) + ' in this tab. ' +
+        'This does NOT change editors or run patches. ' +
+        (replace ? 'Replaced in-tab snapshots cannot be recovered unless downloaded.' : ''))) {
+      workspaceMessage('Snapshot collection import canceled. Existing snapshots preserved.');
+      return;
+    }
+    if (request !== collectionImportGeneration || mode !== workspaceCollectionMode.value) return;
+    // One atomic, preflighted in-memory commit; replacement invalidates any
+    // staged preview that refers to a soon-to-be-deleted snapshot ID.
+    const created = sessionSnapshots.addMany(items, { replace });
+    collectionImportGeneration++;
+    if (replace && stagedWorkspace?.sessionSnapshotId) discardWorkspaceStaging(
+      'Session collection replaced; the previous snapshot preview was canceled.');
+    renderSessionSnapshotControls(created[0]?.id ?? '');
+    workspaceMessage('Imported ' + created.length + ' session snapshots (' +
+      (replace ? 'replaced' : 'appended') + '). Editors were not modified. ' +
+      'Download snapshots or their collection to keep them after reload.');
+  } catch (error) {
+    if (request === collectionImportGeneration) workspaceMessage(
+      'Could not import snapshot collection: ' +
+      (error instanceof Error ? error.message : 'invalid collection'), true);
+  }
+}
 renderSessionSnapshotControls();
 
 function stagedWorkspaceIsCurrent(staged) {

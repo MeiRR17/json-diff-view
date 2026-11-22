@@ -80,6 +80,17 @@
           </div>
         </div>
         <p class="hint" id="workspace-snapshot-summary" role="status" aria-live="polite">No manual session snapshots yet.</p>
+        <div class="workspace-collection-actions" role="group" aria-label="Export or import a collection of snapshots">
+          <button class="button subtle" type="button" id="workspace-collection-export" disabled>↓ Download all snapshots</button>
+          <label for="workspace-collection-mode">When importing a collection</label>
+          <select id="workspace-collection-mode">
+            <option value="append">Append to snapshots in this tab</option>
+            <option value="replace">Replace all snapshots in this tab</option>
+          </select>
+          <button class="button subtle" type="button" id="workspace-collection-import">↑ Open snapshot collection</button>
+          <input id="workspace-collection-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <p class="hint">Collection import requires confirmation and changes only the in-tab snapshot list, never the current editors. Append respects the 8-snapshot / 24 MiB memory limit; Replace discards existing in-tab snapshots. The file is bounded at 32 MiB.</p>
       </section>
       <section class="workspace-preview" id="workspace-preview" aria-labelledby="workspace-preview-heading" hidden>
         <h2 id="workspace-preview-heading">Review workspace restore</h2>
