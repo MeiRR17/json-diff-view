@@ -339,6 +339,10 @@ let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
 let latestSnapshotComparison = null;
 let latestSnapshotStructuralComparison = null;
+// Reserved comparison-only ID: snapshot IDs are numeric strings.
+const CURRENT_WORKSPACE_ENTRY_ID = '@current';
+let snapshotRawLiveBasis = null;
+let snapshotStructuralLiveBasis = null;
 let snapshotSemanticPage = 0;
 let latestInspection = null;
 let inspectionPage = 0;
@@ -517,6 +521,7 @@ for (const [field, key] of [
     discardWorkspaceStaging(
       'Workspace preview canceled because the current work changed. Open the file again.');
     invalidateWorkspaceUndoOnEdit(key);
+    invalidateLiveSnapshotComparisons();
   });
 }
 for (const [control, key] of [
@@ -527,6 +532,7 @@ for (const [control, key] of [
     discardWorkspaceStaging(
       'Workspace preview canceled because the current work changed. Open the file again.');
     invalidateWorkspaceUndoOnEdit(key);
+    invalidateLiveSnapshotComparisons();
   });
 }
 workspaceSaveButton.addEventListener('click', () => {
@@ -554,9 +560,60 @@ workspaceCancelButton.addEventListener('click', () => {
 function selectedSessionSnapshot() {
   return sessionSnapshots.read(workspaceSnapshotSelect.value);
 }
+/**
+ * A comparison-only entry captures current raw drafts without using a
+ * session snapshot slot. It is never written to browser persistence.
+ */
+function comparisonWorkspaceEntry(id) {
+  if (id === CURRENT_WORKSPACE_ENTRY_ID) return {
+    id: CURRENT_WORKSPACE_ENTRY_ID,
+    name: 'Current unsaved workspace (captured)',
+    content: serializeWorkspace(currentWorkspaceValues())
+  };
+  return sessionSnapshots.read(id);
+}
+function liveBasisForPair(first, second) {
+  if (first?.id === CURRENT_WORKSPACE_ENTRY_ID) return first.content;
+  if (second?.id === CURRENT_WORKSPACE_ENTRY_ID) return second.content;
+  return null;
+}
+/** Invalidate reports tied to editor state while retaining saved-only reports. */
+function invalidateLiveSnapshotComparisons() {
+  let cleared = false;
+  if (snapshotRawLiveBasis !== null) {
+    invalidateRawSnapshotComparison();
+    cleared = true;
+  }
+  if (snapshotStructuralLiveBasis !== null) {
+    invalidateSnapshotSemanticComparison();
+    cleared = true;
+  }
+  if (cleared) snapshotCompareMessage(
+    'The unsaved workspace changed. Compare again to update saved-vs-current results.');
+}
+/**
+ * Programmatic file imports need not dispatch input/change events.
+ * Guard both exports and result rendering against such stale live reports.
+ */
+function ensureLiveSnapshotComparisonFresh(kind) {
+  const basis = kind === 'structural' ?
+    snapshotStructuralLiveBasis : snapshotRawLiveBasis;
+  if (basis === null) return true;
+  let isCurrent = false;
+  try { isCurrent = serializeWorkspace(currentWorkspaceValues()) === basis; }
+  catch { isCurrent = false; }
+  if (isCurrent) return true;
+  if (kind === 'structural') invalidateSnapshotSemanticComparison();
+  else invalidateRawSnapshotComparison();
+  snapshotCompareMessage('The current workspace changed since this comparison. ' +
+    'Rerun Compare to refresh before viewing or exporting.', true);
+  return false;
+}
+
 const SNAPSHOT_SEMANTIC_PAGE_SIZE = 75;
 function invalidateSnapshotSemanticComparison() {
   latestSnapshotStructuralComparison = null;
+  snapshotStructuralLiveBasis = null;
   snapshotSemanticPage = 0;
   snapshotSemanticPanel.hidden = true;
   snapshotSemanticSummary.textContent = '';
@@ -568,7 +625,7 @@ function invalidateSnapshotSemanticComparison() {
 }
 function renderSnapshotSemanticRows() {
   const report = latestSnapshotStructuralComparison;
-  if (!report) return;
+  if (!report || !ensureLiveSnapshotComparisonFresh('structural')) return;
   const area = snapshotSemanticEditor.value;
   const type = snapshotSemanticType.value;
   const needle = snapshotSemanticPath.value.trim().toLocaleLowerCase();
@@ -609,7 +666,7 @@ function renderSnapshotSemanticRows() {
 }
 function renderSnapshotSemanticComparison() {
   const report = latestSnapshotStructuralComparison;
-  if (!report) return;
+  if (!report || !ensureLiveSnapshotComparisonFresh('structural')) return;
   snapshotSemanticPanel.hidden = false;
   snapshotSemanticSummary.textContent =
     'READ-ONLY STRUCTURAL JSON COMPARISON. ' +
@@ -666,11 +723,13 @@ snapshotSemanticNext.addEventListener('click', () => {
   renderSnapshotSemanticRows();
 });
 snapshotSemanticRun.addEventListener('click', () => {
-  const first = sessionSnapshots.read(snapshotCompareFrom.value);
-  const second = sessionSnapshots.read(snapshotCompareTo.value);
-  if (!first || !second || first.id === second.id) return;
+  if (snapshotSemanticRun.disabled) return;
   try {
+    const first = comparisonWorkspaceEntry(snapshotCompareFrom.value);
+    const second = comparisonWorkspaceEntry(snapshotCompareTo.value);
+    if (!first || !second || first.id === second.id) return;
     latestSnapshotStructuralComparison = compareSnapshotJsonStructures(first, second);
+    snapshotStructuralLiveBasis = liveBasisForPair(first, second);
     renderSnapshotSemanticComparison();
     snapshotSemanticJson.disabled = false;
     snapshotSemanticCsv.disabled = false;
@@ -682,7 +741,7 @@ snapshotSemanticRun.addEventListener('click', () => {
   }
 });
 snapshotSemanticJson.addEventListener('click', () => {
-  if (!latestSnapshotStructuralComparison) return;
+  if (!latestSnapshotStructuralComparison || !ensureLiveSnapshotComparisonFresh('structural')) return;
   try {
     downloadReport(serializeSnapshotStructuralJson(latestSnapshotStructuralComparison),
       'snapshot-structural-comparison.json', 'application/json;charset=utf-8');
@@ -693,7 +752,7 @@ snapshotSemanticJson.addEventListener('click', () => {
   }
 });
 snapshotSemanticCsv.addEventListener('click', () => {
-  if (!latestSnapshotStructuralComparison) return;
+  if (!latestSnapshotStructuralComparison || !ensureLiveSnapshotComparisonFresh('structural')) return;
   try {
     downloadReport(serializeSnapshotStructuralCsv(latestSnapshotStructuralComparison),
       'snapshot-structural-comparison.csv', 'text/csv;charset=utf-8');
@@ -704,21 +763,29 @@ snapshotSemanticCsv.addEventListener('click', () => {
   }
 });
 
-function invalidateSessionSnapshotComparison() {
+function invalidateRawSnapshotComparison() {
   latestSnapshotComparison = null;
+  snapshotRawLiveBasis = null;
   snapshotCompareResults.hidden = true;
   snapshotCompareSummary.textContent = '';
   snapshotCompareSections.replaceChildren();
   snapshotCompareRows.replaceChildren();
   snapshotCompareJson.disabled = true;
   snapshotCompareCsv.disabled = true;
+}
+function invalidateSessionSnapshotComparison() {
+  invalidateRawSnapshotComparison();
   invalidateSnapshotSemanticComparison();
 }
 function populateSnapshotCompareSelects(items) {
-  const earlier = snapshotCompareFrom.value;
-  const later = snapshotCompareTo.value;
+  const fromId = snapshotCompareFrom.value;
+  const toId = snapshotCompareTo.value;
   for (const control of [snapshotCompareFrom, snapshotCompareTo]) {
     const fragment = document.createDocumentFragment();
+    const current = document.createElement('option');
+    current.value = CURRENT_WORKSPACE_ENTRY_ID;
+    current.textContent = 'Current unsaved workspace';
+    fragment.append(current);
     for (const item of items) {
       const option = document.createElement('option');
       option.value = item.id;
@@ -726,19 +793,25 @@ function populateSnapshotCompareSelects(items) {
       fragment.append(option);
     }
     control.replaceChildren(fragment);
-    control.disabled = items.length < 2;
+    control.disabled = items.length === 0;
   }
-  snapshotCompareFrom.value = items.some(item => item.id === earlier) ?
-    earlier : (items[0]?.id || '');
-  snapshotCompareTo.value = items.some(item => item.id === later) ?
-    later : (items[1]?.id || '');
+  const allowed = id =>
+    id === CURRENT_WORKSPACE_ENTRY_ID || items.some(item => item.id === id);
+  snapshotCompareFrom.value = allowed(fromId) ?
+    fromId : (items[0]?.id || CURRENT_WORKSPACE_ENTRY_ID);
+  snapshotCompareTo.value = allowed(toId) && toId !== snapshotCompareFrom.value ?
+    toId : (items[1]?.id || (snapshotCompareFrom.value === CURRENT_WORKSPACE_ENTRY_ID ?
+      items[0]?.id : CURRENT_WORKSPACE_ENTRY_ID));
   refreshSnapshotCompareAction();
 }
 function refreshSnapshotCompareAction() {
-  const a = sessionSnapshots.read(snapshotCompareFrom.value);
-  const b = sessionSnapshots.read(snapshotCompareTo.value);
-  snapshotCompareRun.disabled = !a || !b || a.id === b.id;
-  snapshotSemanticRun.disabled = snapshotCompareRun.disabled;
+  const a = snapshotCompareFrom.value, b = snapshotCompareTo.value;
+  const allowed = id => id === CURRENT_WORKSPACE_ENTRY_ID ||
+    Boolean(sessionSnapshots.read(id));
+  const valid = sessionSnapshots.usage().count > 0 &&
+    a !== b && allowed(a) && allowed(b);
+  snapshotCompareRun.disabled = !valid;
+  snapshotSemanticRun.disabled = !valid;
 }
 function snapshotCompareMessage(message, error = false) {
   snapshotCompareStatus.textContent = message;
@@ -746,7 +819,7 @@ function snapshotCompareMessage(message, error = false) {
 }
 function renderSnapshotComparison() {
   const report = latestSnapshotComparison;
-  if (!report) return;
+  if (!report || !ensureLiveSnapshotComparisonFresh('raw')) return;
   snapshotCompareResults.hidden = false;
   snapshotCompareSummary.textContent =
     'READ-ONLY RAW DRAFT COMPARISON. ' + report.from.name + ' → ' +
@@ -777,7 +850,7 @@ function renderSnapshotComparison() {
 }
 function renderSnapshotComparisonDetails() {
   const report = latestSnapshotComparison;
-  if (!report) return;
+  if (!report || !ensureLiveSnapshotComparisonFresh('raw')) return;
   const area = snapshotCompareArea.value;
   const rows = report.details.filter(item => area === 'all' || item.section === area);
   const fragment = document.createDocumentFragment();
@@ -809,11 +882,13 @@ for (const control of [snapshotCompareFrom, snapshotCompareTo]) {
 }
 snapshotCompareArea.addEventListener('change', renderSnapshotComparisonDetails);
 snapshotCompareRun.addEventListener('click', () => {
-  const before = sessionSnapshots.read(snapshotCompareFrom.value);
-  const after = sessionSnapshots.read(snapshotCompareTo.value);
-  if (!before || !after || before.id === after.id) return;
+  if (snapshotCompareRun.disabled) return;
   try {
+    const before = comparisonWorkspaceEntry(snapshotCompareFrom.value);
+    const after = comparisonWorkspaceEntry(snapshotCompareTo.value);
+    if (!before || !after || before.id === after.id) return;
     latestSnapshotComparison = compareSnapshotWorkspaces(before, after);
+    snapshotRawLiveBasis = liveBasisForPair(before, after);
     renderSnapshotComparison();
     snapshotCompareJson.disabled = false;
     snapshotCompareCsv.disabled = false;
@@ -825,7 +900,7 @@ snapshotCompareRun.addEventListener('click', () => {
   }
 });
 snapshotCompareJson.addEventListener('click', () => {
-  if (!latestSnapshotComparison) return;
+  if (!latestSnapshotComparison || !ensureLiveSnapshotComparisonFresh('raw')) return;
   try {
     downloadReport(serializeSnapshotComparisonJson(latestSnapshotComparison),
       'snapshot-raw-comparison.json', 'application/json;charset=utf-8');
@@ -836,7 +911,7 @@ snapshotCompareJson.addEventListener('click', () => {
   }
 });
 snapshotCompareCsv.addEventListener('click', () => {
-  if (!latestSnapshotComparison) return;
+  if (!latestSnapshotComparison || !ensureLiveSnapshotComparisonFresh('raw')) return;
   try {
     downloadReport(serializeSnapshotComparisonCsv(latestSnapshotComparison),
       'snapshot-raw-comparison.csv', 'text/csv;charset=utf-8');
@@ -4025,6 +4100,11 @@ function invalidatePatchResult() {
   downloadImpactCsvButton.disabled = true;
 }
 function resetReport() {
+  // Bulk/programmatic editor replacements do not necessarily dispatch input.
+  // Keep saved-only reports, but discard stale live-based comparisons.
+  if (snapshotRawLiveBasis !== null) ensureLiveSnapshotComparisonFresh('raw');
+  if (snapshotStructuralLiveBasis !== null)
+    ensureLiveSnapshotComparisonFresh('structural');
   if (latestImportedFailure) invalidateImportedFailure(
     'Editor contents changed. Import the failure bundle again before verifying.');
   invalidatePatchResult();

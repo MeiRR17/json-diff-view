@@ -89,16 +89,16 @@
         <p class="hint" id="workspace-snapshot-summary" role="status" aria-live="polite">No manual session snapshots yet.</p>
         <section class="workspace-snapshot-compare" aria-labelledby="snapshot-compare-heading">
           <h3 id="snapshot-compare-heading">Compare saved snapshots</h3>
-          <p class="hint">Compare two saved states without restoring them. Raw drafts can be incomplete JSON. Line previews are bounded and aligned by index after shared prefix/suffix removal; these are not semantic JSON diffs.</p>
+          <p class="hint">Compare a saved snapshot with another snapshot or with the current unsaved workspace, without modifying any editor. The current draft is captured only when Compare is clicked, not added to saved snapshots. Raw drafts may be incomplete JSON; raw line previews are not semantic JSON diffs.</p>
           <div class="snapshot-compare-controls">
-            <label for="snapshot-compare-from">Earlier snapshot</label>
+            <label for="snapshot-compare-from">Compare from</label>
             <select id="snapshot-compare-from" disabled></select>
-            <label for="snapshot-compare-to">Later snapshot</label>
+            <label for="snapshot-compare-to">Compare to</label>
             <select id="snapshot-compare-to" disabled></select>
             <button class="button subtle" type="button" id="snapshot-compare-run" disabled>Compare saved drafts</button>
             <button class="button subtle" type="button" id="snapshot-semantic-run" disabled>Compare JSON structure</button>
           </div>
-          <p class="hint" id="snapshot-compare-status" role="status" aria-live="polite">Save at least two snapshots to compare them.</p>
+          <p class="hint" id="snapshot-compare-status" role="status" aria-live="polite">Save at least one snapshot to compare it with the current workspace or another saved point.</p>
           <div id="snapshot-compare-results" hidden>
             <div class="section-heading">
               <h4>Snapshot comparison</h4>
