@@ -4,7 +4,9 @@
  * Supports consecutive-pair or fixed-first-baseline comparisons.
  * No patches are executed and no archived verdict is reverified.
  */
-import { compareVerificationArchives } from './evidence-compare.js';
+import {
+  compareVerificationArchives, evidenceFailureIdentity
+} from './evidence-compare.js';
 import { parseVerificationEvidence } from './evidence.js';
 
 const MAX_ARCHIVES = 10;
@@ -110,6 +112,70 @@ function summarizeHotspots(byPath) {
   };
 }
 
+
+/**
+ * Group by the same operation identity used by two-file comparisons, not by
+ * error message or environment-dependent replay results. A case can reappear
+ * after a different identity; contiguous runs record these gaps explicitly.
+ */
+function inventoryFailureCases(parsed, archives) {
+  const byIdentity = new Map();
+  const cases = [];
+  const runs = [];
+  const membership = [];
+  for (let index = 0; index < parsed.length; index++) {
+    const { metadata, result } = parsed[index];
+    const key = evidenceFailureIdentity(metadata);
+    let group = byIdentity.get(key);
+    if (!group) {
+      group = {
+        id: 'case-' + (cases.length + 1),
+        source: metadata.source,
+        failed_operation_index: metadata.failed_operation_index,
+        operation_type: metadata.operation_type,
+        operation_path: metadata.operation_path,
+        operation_from: metadata.operation_from,
+        snapshots: 0,
+        reproduced_claims: 0,
+        first_file: archives[index].name,
+        last_file: archives[index].name,
+        first_snapshot_index: index + 1,
+        last_snapshot_index: index + 1,
+        snapshot_indexes: [],
+        contiguous_runs: 0
+      };
+      byIdentity.set(key, group);
+      cases.push(group);
+    }
+    membership.push(group.id);
+    group.snapshots++;
+    if (result.reproduced) group.reproduced_claims++;
+    group.last_file = archives[index].name;
+    group.last_snapshot_index = index + 1;
+    group.snapshot_indexes.push(index + 1);
+
+    let lastRun = runs[runs.length - 1];
+    if (!lastRun || lastRun.case_id !== group.id) {
+      lastRun = {
+        case_id: group.id,
+        start_snapshot_index: index + 1,
+        end_snapshot_index: index + 1,
+        first_file: archives[index].name,
+        last_file: archives[index].name,
+        snapshots: 0,
+        reproduced_claims: 0
+      };
+      runs.push(lastRun);
+      group.contiguous_runs++;
+    }
+    lastRun.end_snapshot_index = index + 1;
+    lastRun.last_file = archives[index].name;
+    lastRun.snapshots++;
+    if (result.reproduced) lastRun.reproduced_claims++;
+  }
+  return { cases, runs, membership };
+}
+
 export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
   if (mode !== 'adjacent' && mode !== 'baseline') {
     throw new TypeError('History mode must be adjacent or baseline.');
@@ -126,8 +192,10 @@ export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
     }
   }
   const parsed = archives.map(validateArchive);
+  const inventory = inventoryFailureCases(parsed, archives);
   const snapshots = parsed.map((archive, i) => ({
     file: archives[i].name,
+    case_id: inventory.membership[i],
     source: archive.metadata.source,
     failed_operation_index: archive.metadata.failed_operation_index,
     operation_type: archive.metadata.operation_type,
@@ -160,6 +228,8 @@ export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
     transitions.push({
       from_file: archives[fromIndex].name,
       to_file: archives[i].name,
+      from_case_id: inventory.membership[fromIndex],
+      to_case_id: inventory.membership[i],
       from_reproduced_claim: comparison.baselineReproduced,
       to_reproduced_claim: comparison.candidateReproduced,
       same_failure_identity: assessment.sameCase,
@@ -184,11 +254,16 @@ export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
       transitions: transitions.length,
       reproduced_claims: snapshots.filter(x => x.reproduced_claim).length,
       different_failure_identities: differentCases,
+      unique_failure_cases: inventory.cases.length,
+      contiguous_case_runs: inventory.runs.length,
+      reappearing_failure_cases: inventory.cases.filter(c => c.contiguous_runs > 1).length,
       truncated_transitions: truncatedTransitions,
       classifications
     },
     snapshots,
     transitions,
+    cases: inventory.cases,
+    case_runs: inventory.runs,
     hotspots: summarizeHotspots(hotspotAccumulator)
   };
 }
@@ -204,7 +279,7 @@ export function serializeEvidenceHistoryCsv(history) {
     'same_failure_identity','classification','recorded_differences',
     'report_truncated','metadata_changes','finding_changes',
     'checkpoint_changes','other_changes','archived_not_reverified',
-    'comparison_mode'
+    'comparison_mode', 'from_case_id', 'to_case_id'
   ]];
   for (const t of history.transitions) {
     lines.push([
@@ -212,7 +287,7 @@ export function serializeEvidenceHistoryCsv(history) {
       t.same_failure_identity,t.classification,t.differences,t.truncated,
       t.changed_areas.metadata,t.changed_areas.findings,
       t.changed_areas.checkpoint,t.changed_areas.other,'true',
-      history.comparison_mode
+      history.comparison_mode, t.from_case_id, t.to_case_id
     ]);
   }
   return '\uFEFF' + lines.map(cells => cells.map(csvCell).join(',')).join('\r\n') + '\r\n';
@@ -247,4 +322,27 @@ export function serializeEvidenceHotspotTimelineCsv(history, selected) {
     ]);
   }
   return '\uFEFF' + lines.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
+/** Export bounded case groups without reinterpreting archived verdicts. */
+export function serializeEvidenceCasesCsv(history) {
+  if (!history || !Array.isArray(history.cases)) {
+    throw new TypeError('Analyze an evidence history before exporting its cases.');
+  }
+  const rows = [[
+    'case_id', 'source', 'failed_operation_index', 'operation_type',
+    'operation_path', 'operation_from', 'snapshots', 'reproduced_claims',
+    'contiguous_runs', 'first_file', 'last_file', 'snapshot_indexes',
+    'comparison_mode', 'archived_not_reverified'
+  ]];
+  for (const item of history.cases) {
+    rows.push([
+      item.id, item.source, item.failed_operation_index, item.operation_type,
+      item.operation_path, item.operation_from ?? '',
+      item.snapshots, item.reproduced_claims, item.contiguous_runs,
+      item.first_file, item.last_file, item.snapshot_indexes.join(';'),
+      history.comparison_mode, 'true'
+    ]);
+  }
+  return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }

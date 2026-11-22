@@ -374,3 +374,16 @@ a{color:#155a98}
 .evidence-hotspots td:last-child{display:flex;flex-wrap:wrap;gap:6px}
 @media(max-width:700px){.evidence-hotspot-timeline .section-heading .button{width:100%}}
 @media(prefers-color-scheme:dark){.evidence-hotspot-timeline{border-color:#3b5068}#evidence-hotspot-timeline-summary{color:#b6cce3}}
+
+/* Identity-aware summary of archived failure evidence, not a live diagnosis. */
+.evidence-case-inventory{margin:22px 0 0;padding:17px 0;border-top:1px solid #d8e1ed}
+.evidence-case-inventory .section-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.evidence-case-inventory h4{font-size:.95rem;margin:0}
+#evidence-history-cases-summary{font-size:.85rem;font-weight:650;color:#3d5471;overflow-wrap:anywhere}
+.evidence-case-inventory td{overflow-wrap:anywhere}
+.evidence-case-inventory td:last-child{display:flex;flex-wrap:wrap;gap:6px}
+.evidence-case-inventory td .button{font-size:.8rem;white-space:nowrap}
+#evidence-history-case-filter{font:inherit;min-height:38px;min-width:140px;padding:8px 10px;max-width:100%;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px}
+#evidence-history-case-filter:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+@media(max-width:700px){.evidence-case-inventory .section-heading .button{flex:1 1 140px}#evidence-history-case-filter{flex:1 1 160px}}
+@media(prefers-color-scheme:dark){.evidence-case-inventory{border-color:#3b5068}#evidence-history-cases-summary{color:#b6cce3}#evidence-history-case-filter{color:#e3f1ff;background:#19293b;border-color:#536783}}

@@ -10,7 +10,7 @@ import { serializeVerificationEvidence, parseVerificationEvidence } from './evid
 import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
 import {
   buildEvidenceHistory, serializeEvidenceHistoryJson, serializeEvidenceHistoryCsv,
-  serializeEvidenceHotspotTimelineCsv
+  serializeEvidenceHotspotTimelineCsv, serializeEvidenceCasesCsv
 } from './evidence-history.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -186,6 +186,11 @@ const evidenceHistoryPanel = document.querySelector('#evidence-history-results')
 const evidenceHistorySummary = document.querySelector('#evidence-history-summary');
 const evidenceHistoryRows = document.querySelector('#evidence-history-rows');
 const evidenceHistoryFilter = document.querySelector('#evidence-history-filter');
+const evidenceHistoryCaseFilter = document.querySelector('#evidence-history-case-filter');
+const evidenceHistoryCasesPanel = document.querySelector('#evidence-history-cases');
+const evidenceHistoryCasesSummary = document.querySelector('#evidence-history-cases-summary');
+const evidenceHistoryCasesRows = document.querySelector('#evidence-history-cases-rows');
+const evidenceHistoryCasesCsvButton = document.querySelector('#download-evidence-cases-csv');
 const evidenceHistoryMode = document.querySelector('#evidence-history-mode');
 const evidenceHistoryTableTitle = document.querySelector('#evidence-history-table-title');
 const evidenceHistoryCustomFrom = document.querySelector('#evidence-history-custom-from');
@@ -1709,12 +1714,108 @@ evidenceHotspotsCsvButton.addEventListener('click', () => {
   }
 });
 
+
+/** Case IDs are local to this selected, filename-ordered archive history. */
+function populateHistoryCaseFilter(history) {
+  evidenceHistoryCaseFilter.replaceChildren();
+  const all = document.createElement('option');
+  all.value = 'all';
+  all.textContent = 'All failure identities';
+  evidenceHistoryCaseFilter.append(all);
+  for (const item of history.cases) {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = item.id + ' — ' + item.operation_type +
+      ' ' + item.operation_path;
+    evidenceHistoryCaseFilter.append(option);
+  }
+  evidenceHistoryCaseFilter.value = 'all';
+  evidenceHistoryCaseFilter.disabled = false;
+}
+function renderHistoryCases() {
+  const history = latestEvidenceHistory;
+  if (!history) return;
+  evidenceHistoryCasesPanel.hidden = false;
+  evidenceHistoryCasesSummary.textContent =
+    history.summary.unique_failure_cases + ' distinct recorded failure identities in ' +
+    history.summary.contiguous_case_runs + ' contiguous filename-ordered runs; ' +
+    history.summary.reappearing_failure_cases + ' identities reappear after other cases. ' +
+    'Identity is based on source, failed operation index/type/path/from, not error wording. ' +
+    'These are saved claims, NOT REVERIFIED.';
+  const fragment = document.createDocumentFragment();
+  for (const item of history.cases) {
+    const row = document.createElement('tr');
+    const identity = item.source + ' · #' + item.failed_operation_index +
+      ' ' + item.operation_type + ' ' + item.operation_path +
+      (item.operation_from === null ? '' : ' from ' + item.operation_from);
+    for (const value of [
+      item.id, identity, String(item.snapshots),
+      String(item.reproduced_claims), String(item.contiguous_runs),
+      item.first_file + ' → ' + item.last_file
+    ]) row.append(cell('td', value));
+    const actions = document.createElement('td');
+    const focus = document.createElement('button');
+    focus.type = 'button';
+    focus.className = 'button subtle';
+    focus.textContent = 'Focus history';
+    focus.setAttribute('aria-label', 'Focus archive comparisons involving ' + item.id);
+    focus.addEventListener('click', () => {
+      evidenceHistoryCaseFilter.value = item.id;
+      invalidateHistoryDetail();
+      renderEvidenceHistory();
+      evidenceHistoryTableTitle.scrollIntoView({ block: 'nearest' });
+    });
+    actions.append(focus);
+    const compare = document.createElement('button');
+    compare.type = 'button';
+    compare.className = 'button subtle';
+    compare.textContent = 'First vs last';
+    compare.disabled = item.snapshots < 2;
+    compare.setAttribute('aria-label', 'Inspect earliest and latest snapshots of ' + item.id);
+    compare.addEventListener('click', () => {
+      if (item.snapshots >= 2) {
+        void openHistoryPair(item.first_snapshot_index - 1,
+          item.last_snapshot_index - 1, 'custom');
+      }
+    });
+    actions.append(compare);
+    row.append(actions);
+    fragment.append(row);
+  }
+  evidenceHistoryCasesRows.replaceChildren(fragment);
+}
+evidenceHistoryCaseFilter.addEventListener('change', () => {
+  invalidateHistoryDetail();
+  renderEvidenceHistory();
+});
+evidenceHistoryCasesCsvButton.addEventListener('click', () => {
+  if (!latestEvidenceHistory) return;
+  try {
+    downloadReport(serializeEvidenceCasesCsv(latestEvidenceHistory),
+      'archived-evidence-failure-cases.csv', 'text/csv;charset=utf-8');
+    historyMessage('All recorded failure case groups exported as local CSV.');
+  } catch (error) {
+    historyMessage('Case inventory export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
 function invalidateEvidenceHistory() {
   invalidateHistoryDetail();
   evidenceHistoryGeneration++;
   latestEvidenceHistory = null;
   latestEvidenceHistoryFiles = null;
   evidenceHistoryPanel.hidden = true;
+  evidenceHistoryCasesPanel.hidden = true;
+  evidenceHistoryCasesRows.replaceChildren();
+  evidenceHistoryCasesSummary.textContent = '';
+  evidenceHistoryCasesCsvButton.disabled = true;
+  evidenceHistoryCaseFilter.replaceChildren();
+  const allCases = document.createElement('option');
+  allCases.value = 'all';
+  allCases.textContent = 'All failure identities';
+  evidenceHistoryCaseFilter.append(allCases);
+  evidenceHistoryCaseFilter.disabled = true;
   evidenceHotspotsPanel.hidden = true;
   selectedEvidenceHotspot = null;
   evidenceHotspotTimelinePanel.hidden = true;
@@ -1745,9 +1846,11 @@ function invalidateEvidenceHistory() {
 function renderEvidenceHistory() {
   if (!latestEvidenceHistory) return;
   const history = latestEvidenceHistory;
+  const caseId = evidenceHistoryCaseFilter.value;
   const transitions = history.transitions.filter(t =>
-    evidenceHistoryFilter.value === 'all' ||
-    t.classification === evidenceHistoryFilter.value
+    (evidenceHistoryFilter.value === 'all' ||
+      t.classification === evidenceHistoryFilter.value) &&
+    (caseId === 'all' || t.from_case_id === caseId || t.to_case_id === caseId)
   );
   evidenceHistoryPanel.hidden = false;
   const fixedBaseline = history.comparison_mode === 'baseline';
@@ -1761,11 +1864,14 @@ function renderEvidenceHistory() {
     history.summary.reproduced_claims + ' archives claimed reproduction, ' +
     history.summary.different_failure_identities +
     ' comparisons crossed different failure identities, ' +
+    history.summary.unique_failure_cases + ' unique failure identities, ' +
     history.summary.truncated_transitions + ' truncated transition reports. ' +
     transitions.length + ' transitions match the filter. ' +
     'Filename ascending order is used; comparison mode: ' +
     (fixedBaseline ? 'first baseline' : 'adjacent') +
-    '. Saved claims are NOT reverified.';
+    '. Case focus includes any comparison touching the selected case, ' +
+    'including clearly marked cross-case boundaries. ' +
+    'Saved claims are NOT reverified.';
   const fragment = document.createDocumentFragment();
   if (!transitions.length) {
     const row = document.createElement('tr');
@@ -1839,7 +1945,10 @@ evidenceHistoryRunButton.addEventListener('click', async () => {
     latestEvidenceHistory = history;
     latestEvidenceHistoryFiles = selected;
     setupHistoryCustomPair(selected);
+    populateHistoryCaseFilter(history);
     renderEvidenceHistory();
+    renderHistoryCases();
+    evidenceHistoryCasesCsvButton.disabled = false;
     renderEvidenceHotspots();
     evidenceHotspotsCsvButton.disabled = false;
     evidenceHistoryCopyButton.disabled = false;

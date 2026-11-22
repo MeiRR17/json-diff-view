@@ -42,12 +42,22 @@ function normalizedEvidence(evidence) {
     }
   };
 }
+/**
+ * Shared identity definition for archived failure comparisons and history.
+ * Display labels/replay modes/reasons are not part of operation identity.
+ * JSON tuple encoding prevents ambiguous concatenation or delimiter issues.
+ */
+export function evidenceFailureIdentity(metadata) {
+  return JSON.stringify([
+    metadata.source,
+    metadata.failed_operation_index,
+    metadata.operation_type,
+    metadata.operation_path,
+    metadata.operation_from
+  ]);
+}
 function sameFailureCase(a, b) {
-  return a.source === b.source &&
-    a.failed_operation_index === b.failed_operation_index &&
-    a.operation_type === b.operation_type &&
-    a.operation_path === b.operation_path &&
-    a.operation_from === b.operation_from;
+  return evidenceFailureIdentity(a) === evidenceFailureIdentity(b);
 }
 
 /** Logical categories of differences in the normalized saved evidence. */

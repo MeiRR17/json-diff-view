@@ -220,7 +220,7 @@
       </section>
       <section class="evidence-history-workspace" aria-labelledby="evidence-history-heading">
         <h3 id="evidence-history-heading">Review saved evidence history</h3>
-        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Compare consecutive archives or every later file against the first baseline; use Inspect comparison to open full recorded differences with filters and local exports. Different failure cases are flagged. Recurring evidence change paths are ranked across the comparisons. No patch is executed.</p>
+        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Compare consecutive archives or every later file against the first baseline; use Inspect comparison to open full recorded differences with filters and local exports. Different failure cases are flagged, and snapshots are grouped by recorded failure identity to distinguish revisited cases from changes to other operations. Recurring evidence change paths are ranked across the comparisons. No patch is executed.</p>
         <div class="evidence-history-inputs">
           <label for="evidence-history-files">Saved evidence files</label>
           <input id="evidence-history-files" type="file" multiple accept=".json,application/json">
@@ -254,6 +254,10 @@
               <option value="different-failure-case">Different failure identity</option>
               <option value="unchanged">Unchanged</option>
             </select>
+            <label for="evidence-history-case-filter">Failure identity</label>
+            <select id="evidence-history-case-filter" disabled>
+              <option value="all">All failure identities</option>
+            </select>
           </div>
           <div class="evidence-history-custom" role="group" aria-label="Compare any two loaded history snapshots">
             <p class="hint">Compare any two loaded files in filename order, including nonadjacent snapshots. This opens a separate detail report; it does not change the history mode, transition summaries, or exports.</p>
@@ -272,6 +276,21 @@
               <tbody id="evidence-history-rows"></tbody>
             </table>
           </div>
+
+          <section class="evidence-case-inventory" id="evidence-history-cases" aria-labelledby="evidence-history-cases-heading" hidden>
+            <div class="section-heading">
+              <h4 id="evidence-history-cases-heading">Recorded failure identities</h4>
+              <button class="button subtle" id="download-evidence-cases-csv" type="button" disabled>↓ Cases CSV</button>
+            </div>
+            <p class="hint">Groups snapshots by the source and failed operation index/type/path/from; a case may reappear after other cases. Focus history includes comparisons touching that case, with cross-case boundaries clearly labeled. First vs last inspects the earliest and latest saved snapshots of that same identity, even when separated by other cases.</p>
+            <p id="evidence-history-cases-summary" role="status" aria-live="polite"></p>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Case</th><th scope="col">Failed operation identity</th><th scope="col">Snapshots</th><th scope="col">Reproduced claims</th><th scope="col">Runs</th><th scope="col">First / last file</th><th scope="col">Explore</th></tr></thead>
+                <tbody id="evidence-history-cases-rows"></tbody>
+              </table>
+            </div>
+          </section>
           <section class="evidence-hotspots" id="evidence-history-hotspots" aria-labelledby="evidence-hotspots-heading" hidden>
             <div class="section-heading">
               <h4 id="evidence-hotspots-heading">Recurring evidence change paths</h4>
