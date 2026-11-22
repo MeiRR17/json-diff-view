@@ -512,3 +512,10 @@ a{color:#155a98}
 .workspace-snapshot-compare .snapshot-line-removed td:first-child{border-left:3px solid #ad5d3b}
 .workspace-snapshot-compare .snapshot-line-changed td:first-child{border-left:3px solid #3677b9}
 @media(prefers-color-scheme:dark){#snapshot-compare-change-kind{background:#19293b;color:#e3f1ff;border-color:#536783}}
+
+/* Bounded change-hunk navigation for raw snapshot line comparisons. */
+#snapshot-compare-hunk{font:inherit;min-height:38px;padding:8px 10px;min-width:0;max-width:100%;border:1px solid #bdcde0;border-radius:8px;background:#fff;color:#18324d;flex:1 1 220px}
+#snapshot-compare-hunk:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+#snapshot-compare-hunk:disabled{opacity:.6}
+#snapshot-compare-hunk-summary{font-size:.83rem;overflow-wrap:anywhere}
+@media(prefers-color-scheme:dark){#snapshot-compare-hunk{background:#19293b;color:#e3f1ff;border-color:#536783}}

@@ -5,6 +5,8 @@
  * subsequence (LCS) to distinguish additions, removals and replacements
  * without treating all subsequent lines as changed after an insertion.
  * Large regions fall back to index alignment and are explicitly labeled.
+ * Every maximal adjacent run of changed records is numbered as a hunk;
+ * an exactly equal aligned line always starts a new region afterward.
  *
  * This is NOT JSON parsing, patch generation or an executed operation.
  */
@@ -18,8 +20,16 @@ export function alignRawLineChanges(left, right, prefix, suffix, emit) {
     rightSize <= MAX_LINE_LCS_AXIS &&
     leftSize * rightSize <= MAX_LINE_LCS_CELLS;
   let added = 0, removed = 0, changed = 0, rows = 0;
+  let hunks = 0;
+  let insideHunk = false;
 
   function record(beforeOffset, afterOffset) {
+    // An unchanged line ends one region of contiguous edits. Each new run
+    // receives a stable, 1-based hunk ID even if its preview is truncated.
+    if (!insideHunk) {
+      hunks++;
+      insideHunk = true;
+    }
     const beforePresent = beforeOffset !== null;
     const afterPresent = afterOffset !== null;
     const changeType = beforePresent && afterPresent ? 'changed' :
@@ -29,6 +39,7 @@ export function alignRawLineChanges(left, right, prefix, suffix, emit) {
     else changed++;
     rows++;
     emit({
+      hunk_index: hunks,
       change_type: changeType,
       from_line: beforePresent ? prefix + beforeOffset + 1 : null,
       to_line: afterPresent ? prefix + afterOffset + 1 : null,
@@ -46,11 +57,14 @@ export function alignRawLineChanges(left, right, prefix, suffix, emit) {
       const a = i < leftSize ? i : null;
       const b = i < rightSize ? i : null;
       if (a !== null && b !== null &&
-          left[prefix + a] === right[prefix + b]) continue;
+          left[prefix + a] === right[prefix + b]) {
+        insideHunk = false;
+        continue;
+      }
       record(a, b);
     }
     return {
-      strategy: 'positional-fallback', added, removed, changed, rows,
+      strategy: 'positional-fallback', added, removed, changed, rows, hunks,
       alignment_limited: true
     };
   }
@@ -82,6 +96,7 @@ export function alignRawLineChanges(left, right, prefix, suffix, emit) {
     if (i < leftSize && j < rightSize &&
         left[prefix + i] === right[prefix + j]) {
       flush();
+      insideHunk = false;
       i++;
       j++;
     } else if (i < leftSize &&
@@ -94,7 +109,7 @@ export function alignRawLineChanges(left, right, prefix, suffix, emit) {
   }
   flush();
   return {
-    strategy: 'lcs', added, removed, changed, rows,
+    strategy: 'lcs', added, removed, changed, rows, hunks,
     alignment_limited: false
   };
 }

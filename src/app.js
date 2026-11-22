@@ -57,6 +57,8 @@ const snapshotCompareSummary = document.querySelector('#snapshot-compare-summary
 const snapshotCompareSections = document.querySelector('#snapshot-compare-sections');
 const snapshotCompareArea = document.querySelector('#snapshot-compare-area');
 const snapshotCompareChangeKind = document.querySelector('#snapshot-compare-change-kind');
+const snapshotCompareHunk = document.querySelector('#snapshot-compare-hunk');
+const snapshotCompareHunkSummary = document.querySelector('#snapshot-compare-hunk-summary');
 const snapshotCompareRows = document.querySelector('#snapshot-compare-rows');
 const snapshotCompareJson = document.querySelector('#snapshot-compare-json');
 const snapshotCompareCsv = document.querySelector('#snapshot-compare-csv');
@@ -771,6 +773,9 @@ function invalidateRawSnapshotComparison() {
   snapshotCompareSummary.textContent = '';
   snapshotCompareSections.replaceChildren();
   snapshotCompareRows.replaceChildren();
+  snapshotCompareHunk.replaceChildren();
+  snapshotCompareHunkSummary.textContent = '';
+  snapshotCompareHunk.disabled = true;
   snapshotCompareJson.disabled = true;
   snapshotCompareCsv.disabled = true;
 }
@@ -818,6 +823,41 @@ function snapshotCompareMessage(message, error = false) {
   snapshotCompareStatus.textContent = message;
   snapshotCompareStatus.classList.toggle('error', error);
 }
+function renderSnapshotRawHunkChooser(report) {
+  const options = document.createDocumentFragment();
+  const all = document.createElement('option');
+  all.value = 'all';
+  all.textContent = 'All captured change hunks';
+  options.append(all);
+  let selectable = 0;
+  for (const section of report.sections) {
+    if (section.kind !== 'raw-text') continue;
+    for (const hunk of section.hunk_summaries) {
+      // Keep the chooser honest: hunks outside the bounded detail preview
+      // have only metadata; selecting them would show an empty table.
+      if (!hunk.preview_rows) continue;
+      const option = document.createElement('option');
+      option.value = section.id + ':' + hunk.index;
+      const range = (a,b) => a === null ? '—' :
+        a === b ? String(a) : a + '–' + b;
+      option.textContent = section.label + ' · Hunk ' + hunk.index +
+        ' (earlier ' + range(hunk.from_start,hunk.from_end) +
+        ', later ' + range(hunk.to_start,hunk.to_end) +
+        ', ' + hunk.total_rows + ' changed rows)';
+      options.append(option);
+      selectable++;
+    }
+  }
+  snapshotCompareHunk.replaceChildren(options);
+  snapshotCompareHunk.value = 'all';
+  snapshotCompareHunk.disabled = selectable === 0;
+  snapshotCompareHunkSummary.textContent =
+    report.summary.total_hunks + ' change hunks detected; ' + selectable +
+    ' have bounded preview rows available for direct selection. ' +
+    report.summary.omitted_hunk_summaries +
+    ' additional hunks have no stored metadata. Hunk boundaries come from ' +
+    'the selected LCS or positional-fallback alignment, not JSON semantics.';
+}
 function renderSnapshotComparison() {
   const report = latestSnapshotComparison;
   if (!report || !ensureLiveSnapshotComparisonFresh('raw')) return;
@@ -842,7 +882,8 @@ function renderSnapshotComparison() {
       section.from_bytes.toLocaleString() + ' → ' +
       section.to_bytes.toLocaleString() + ' bytes; ' +
       section.from_lines + ' → ' + section.to_lines + ' lines; ' +
-      section.alignment_strategy + ' · +' + section.added_rows +
+      section.alignment_strategy + ' · ' + section.hunk_count +
+      ' hunks · +' + section.added_rows +
       ' / −' + section.removed_rows + ' / ~' + section.changed_rows :
       section.changed_options + ' of ' + section.option_count + ' settings changed';
     for (const v of [section.label, section.changed ? 'Changed' : 'Identical', summary,
@@ -853,6 +894,7 @@ function renderSnapshotComparison() {
     fragment.append(row);
   }
   snapshotCompareSections.replaceChildren(fragment);
+  renderSnapshotRawHunkChooser(report);
   renderSnapshotComparisonDetails();
 }
 function renderSnapshotComparisonDetails() {
@@ -860,20 +902,24 @@ function renderSnapshotComparisonDetails() {
   if (!report || !ensureLiveSnapshotComparisonFresh('raw')) return;
   const area = snapshotCompareArea.value;
   const changeKind = snapshotCompareChangeKind.value;
+  const selectedHunk = snapshotCompareHunk.value || 'all';
   const rows = report.details.filter(item =>
     (area === 'all' || item.section === area) &&
-    (changeKind === 'all' || item.change_type === changeKind));
+    (changeKind === 'all' || item.change_type === changeKind) &&
+    (selectedHunk === 'all' ||
+      item.section + ':' + item.hunk_index === selectedHunk));
   const fragment = document.createDocumentFragment();
   if (!rows.length) {
     const tr = document.createElement('tr');
     const td = cell('td', 'No differing preview rows in this section.', 'empty');
-    td.colSpan = 6;
+    td.colSpan = 7;
     tr.append(td);
     fragment.append(tr);
   } else for (const item of rows) {
     const tr = document.createElement('tr');
     tr.className = 'snapshot-line-' + item.change_type;
     for (const value of [
+      item.hunk_index === null ? '—' : String(item.hunk_index),
       item.change_type,
       item.field,
       item.from_line === null ? '—' : String(item.from_line),
@@ -891,8 +937,16 @@ for (const control of [snapshotCompareFrom, snapshotCompareTo]) {
     refreshSnapshotCompareAction();
   });
 }
-snapshotCompareArea.addEventListener('change', renderSnapshotComparisonDetails);
+snapshotCompareArea.addEventListener('change', () => {
+  snapshotCompareHunk.value = 'all';
+  renderSnapshotComparisonDetails();
+});
 snapshotCompareChangeKind.addEventListener('change', renderSnapshotComparisonDetails);
+snapshotCompareHunk.addEventListener('change', () => {
+  const chosen = snapshotCompareHunk.value;
+  if (chosen !== 'all') snapshotCompareArea.value = chosen.split(':')[0];
+  renderSnapshotComparisonDetails();
+});
 snapshotCompareRun.addEventListener('click', () => {
   if (snapshotCompareRun.disabled) return;
   try {

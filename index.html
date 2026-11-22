@@ -130,14 +130,19 @@
                 <option value="removed">Removed</option>
                 <option value="changed">Changed</option>
               </select>
+              <label for="snapshot-compare-hunk">Change hunk</label>
+              <select id="snapshot-compare-hunk" disabled>
+                <option value="all">All captured change hunks</option>
+              </select>
             </div>
+            <p id="snapshot-compare-hunk-summary" class="hint" role="status" aria-live="polite"></p>
             <div class="results-scroll">
               <table class="diff-table">
-                <thead><tr><th scope="col">Type</th><th scope="col">Field</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
+                <thead><tr><th scope="col">Hunk</th><th scope="col">Type</th><th scope="col">Field</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
                 <tbody id="snapshot-compare-rows"></tbody>
               </table>
             </div>
-            <p class="hint">Up to 180 changed-line previews per editor and 240 characters per line are recorded. Smaller changed regions use LCS alignment (up to 1,000 lines per side and 400,000 matrix cells); larger regions use a clearly marked positional fallback. Exports contain preview rows and strategy metadata, not complete editor drafts. Line snippets may be sensitive.</p>
+            <p class="hint">Changes are grouped into hunks separated by unchanged aligned lines; the selector opens any hunk with retained preview rows. Up to 48 initial hunk summaries and 180 changed-line previews per editor, with 240 characters per line, are recorded. Smaller changed regions use LCS alignment (up to 1,000 lines per side and 400,000 matrix cells); larger regions use a clearly marked positional fallback. Exports contain preview rows and strategy metadata, not complete editor drafts. Line snippets may be sensitive.</p>
           </div>
           <section class="snapshot-semantic-results" id="snapshot-semantic-results" aria-labelledby="snapshot-semantic-heading" hidden>
             <div class="section-heading">
