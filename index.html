@@ -142,6 +142,45 @@
                 <tbody id="snapshot-compare-rows"></tbody>
               </table>
             </div>
+            <section class="snapshot-hunk-search" aria-labelledby="snapshot-hunk-search-heading">
+              <h4 id="snapshot-hunk-search-heading">Search changed lines across all hunks</h4>
+              <p class="hint">Search complete changed lines, even beyond the current preview. Only bounded snippets and their locations are retained. Search never parses JSON or executes patches.</p>
+              <div class="snapshot-hunk-search-controls">
+                <label for="snapshot-hunk-search-query">Find text</label>
+                <input id="snapshot-hunk-search-query" type="search" maxlength="120" placeholder="Property, error, or value">
+                <label for="snapshot-hunk-search-editor">Editor</label>
+                <select id="snapshot-hunk-search-editor">
+                  <option value="all">All editors</option>
+                  <option value="before">Before</option>
+                  <option value="after">After</option>
+                  <option value="patch">JSON Patch</option>
+                </select>
+                <label for="snapshot-hunk-search-side">Side</label>
+                <select id="snapshot-hunk-search-side">
+                  <option value="both">Both</option>
+                  <option value="earlier">Earlier only</option>
+                  <option value="later">Later only</option>
+                </select>
+                <button class="button subtle" id="snapshot-hunk-search-run" type="button" disabled>Search changed lines</button>
+              </div>
+              <div id="snapshot-hunk-search-results" hidden>
+                <div class="section-heading">
+                  <h4>Changed-line matches</h4>
+                  <div class="result-actions">
+                    <button class="button subtle" id="snapshot-hunk-search-json" type="button" disabled>↓ Search JSON</button>
+                    <button class="button subtle" id="snapshot-hunk-search-csv" type="button" disabled>↓ Search CSV</button>
+                  </div>
+                </div>
+                <p id="snapshot-hunk-search-summary" class="hint" role="status" aria-live="polite"></p>
+                <div class="results-scroll">
+                  <table class="diff-table">
+                    <thead><tr><th scope="col">Editor</th><th scope="col">Change</th><th scope="col">Matched</th><th scope="col">Hunk / page</th><th scope="col">Earlier line</th><th scope="col">Earlier snippet</th><th scope="col">Later line</th><th scope="col">Later snippet</th><th scope="col">Inspect</th></tr></thead>
+                    <tbody id="snapshot-hunk-search-rows"></tbody>
+                  </table>
+                </div>
+                <p class="hint">At most 200,000 changed rows are searched, 100 matches retained and 240 characters shown per snippet. Search results are labeled incomplete if some changed rows were not examined. Exports contain only bounded previews, not complete drafts.</p>
+              </div>
+            </section>
             <section class="snapshot-hunk-on-demand" aria-labelledby="snapshot-hunk-inspect-heading">
               <h4 id="snapshot-hunk-inspect-heading">Inspect any change hunk</h4>
               <p class="hint">Open a numbered hunk beyond the initial 48 summaries or 180 displayed rows. The selected editor is realigned locally when requested; use Previous/Next hunk for consecutive changes and optionally include unchanged context. No editor will be modified.</p>

@@ -550,3 +550,17 @@ a{color:#155a98}
 #snapshot-hunk-page-info{font-size:.82rem;font-weight:650;overflow-wrap:anywhere}
 @media(max-width:700px){.snapshot-hunk-page-controls label{flex:1 1 100%}.snapshot-hunk-page-controls .button{flex:1 1 135px}}
 @media(prefers-color-scheme:dark){.snapshot-hunk-page-controls label{color:#b6cce3}.snapshot-hunk-page-controls input{background:#19293b;color:#e3f1ff;border-color:#536783}}
+
+/* Bounded cross-hunk search of changed raw editor lines. */
+.snapshot-hunk-search{border-top:1px solid #d8e1ed;padding:15px 0;margin:18px 0}
+.snapshot-hunk-search h4{font-size:.95rem;margin:0 0 8px}
+.snapshot-hunk-search .hint{overflow-wrap:anywhere}
+.snapshot-hunk-search-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}
+.snapshot-hunk-search-controls label{font-size:.83rem;font-weight:650;color:#3d5471}
+.snapshot-hunk-search-controls input,.snapshot-hunk-search-controls select{font:inherit;min-height:38px;padding:8px 10px;border:1px solid #bdcde0;border-radius:8px;background:#fff;color:#18324d;max-width:100%;min-width:0;flex:1 1 140px}
+.snapshot-hunk-search-controls input{flex:2 1 220px}
+.snapshot-hunk-search-controls :is(input,select):focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.snapshot-hunk-search td{white-space:pre-wrap;overflow-wrap:anywhere}
+#snapshot-hunk-search-summary{font-size:.84rem;font-weight:650}
+@media(max-width:700px){.snapshot-hunk-search-controls label{flex:1 1 100%}.snapshot-hunk-search-controls .button{flex:1 1 100%}}
+@media(prefers-color-scheme:dark){.snapshot-hunk-search{border-color:#3b5068}.snapshot-hunk-search-controls label{color:#b6cce3}.snapshot-hunk-search-controls input,.snapshot-hunk-search-controls select{background:#19293b;color:#e3f1ff;border-color:#536783}}

@@ -15,6 +15,10 @@ import {
   inspectSnapshotHunk, serializeHunkInspectionJson, serializeHunkInspectionCsv
 } from './hunk-inspect.js';
 import {
+  searchChangedSnapshotLines, serializeChangedLineSearchJson,
+  serializeChangedLineSearchCsv
+} from './hunk-search.js';
+import {
   compareSnapshotJsonStructures, serializeSnapshotStructuralJson,
   serializeSnapshotStructuralCsv
 } from './snapshot-semantic.js';
@@ -77,6 +81,15 @@ const snapshotHunkInspectionSummary = document.querySelector('#snapshot-hunk-ins
 const snapshotHunkInspectionRows = document.querySelector('#snapshot-hunk-inspection-rows');
 const snapshotHunkDownloadJson = document.querySelector('#snapshot-hunk-download-json');
 const snapshotHunkDownloadCsv = document.querySelector('#snapshot-hunk-download-csv');
+const snapshotHunkSearchQuery = document.querySelector('#snapshot-hunk-search-query');
+const snapshotHunkSearchEditor = document.querySelector('#snapshot-hunk-search-editor');
+const snapshotHunkSearchSide = document.querySelector('#snapshot-hunk-search-side');
+const snapshotHunkSearchRun = document.querySelector('#snapshot-hunk-search-run');
+const snapshotHunkSearchResults = document.querySelector('#snapshot-hunk-search-results');
+const snapshotHunkSearchSummary = document.querySelector('#snapshot-hunk-search-summary');
+const snapshotHunkSearchRows = document.querySelector('#snapshot-hunk-search-rows');
+const snapshotHunkSearchJson = document.querySelector('#snapshot-hunk-search-json');
+const snapshotHunkSearchCsv = document.querySelector('#snapshot-hunk-search-csv');
 const snapshotCompareRows = document.querySelector('#snapshot-compare-rows');
 const snapshotCompareJson = document.querySelector('#snapshot-compare-json');
 const snapshotCompareCsv = document.querySelector('#snapshot-compare-csv');
@@ -360,6 +373,7 @@ let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
 let latestSnapshotComparison = null;
 let latestHunkInspection = null;
+let latestHunkSearch = null;
 let latestSnapshotStructuralComparison = null;
 // Reserved comparison-only ID: snapshot IDs are numeric strings.
 const CURRENT_WORKSPACE_ENTRY_ID = '@current';
@@ -786,6 +800,7 @@ snapshotSemanticCsv.addEventListener('click', () => {
 });
 
 function invalidateRawSnapshotComparison() {
+  clearHunkSearch();
   clearHunkInspection();
   latestSnapshotComparison = null;
   snapshotRawLiveBasis = null;
@@ -799,6 +814,7 @@ function invalidateRawSnapshotComparison() {
   snapshotHunkOpen.disabled = true;
   snapshotHunkPrevious.disabled = true;
   snapshotHunkNext.disabled = true;
+  snapshotHunkSearchRun.disabled = true;
   snapshotHunkPagePrevious.disabled = true;
   snapshotHunkPageNext.disabled = true;
   snapshotCompareJson.disabled = true;
@@ -848,6 +864,127 @@ function snapshotCompareMessage(message, error = false) {
   snapshotCompareStatus.textContent = message;
   snapshotCompareStatus.classList.toggle('error', error);
 }
+function clearHunkSearch() {
+  latestHunkSearch = null;
+  snapshotHunkSearchResults.hidden = true;
+  snapshotHunkSearchSummary.textContent = '';
+  snapshotHunkSearchRows.replaceChildren();
+  snapshotHunkSearchJson.disabled = true;
+  snapshotHunkSearchCsv.disabled = true;
+}
+function refreshHunkSearchControl() {
+  snapshotHunkSearchRun.disabled = !latestSnapshotComparison ||
+    !snapshotHunkSearchQuery.value.trim() ||
+    snapshotHunkSearchQuery.value.trim().length > 120;
+}
+snapshotHunkSearchQuery.addEventListener('input', () => {
+  clearHunkSearch();
+  refreshHunkSearchControl();
+});
+for (const control of [snapshotHunkSearchEditor, snapshotHunkSearchSide]) {
+  control.addEventListener('change', () => {
+    clearHunkSearch();
+    refreshHunkSearchControl();
+  });
+}
+function openHunkSearchHit(hit) {
+  if (!latestHunkSearch || !latestSnapshotComparison ||
+      !ensureLiveSnapshotComparisonFresh('raw')) return;
+  snapshotHunkEditor.value = hit.editor;
+  snapshotHunkIndex.value = String(hit.hunk_index);
+  snapshotHunkPage.value = String(hit.hunk_page);
+  clearHunkInspection();
+  refreshHunkInspectionControl();
+  openHunkInspection();
+  if (!snapshotHunkInspection.hidden) {
+    snapshotHunkInspection.scrollIntoView({ block: 'nearest' });
+  }
+}
+snapshotHunkSearchRun.addEventListener('click', () => {
+  if (snapshotHunkSearchRun.disabled || !latestSnapshotComparison ||
+      !ensureLiveSnapshotComparisonFresh('raw')) return;
+  try {
+    const pair = latestSnapshotComparison;
+    const first = comparisonWorkspaceEntry(pair.from.id);
+    const second = comparisonWorkspaceEntry(pair.to.id);
+    const found = searchChangedSnapshotLines(
+      first, second, snapshotHunkSearchQuery.value,
+      snapshotHunkSearchEditor.value, snapshotHunkSearchSide.value);
+    if (!ensureLiveSnapshotComparisonFresh('raw')) return;
+    clearHunkSearch();
+    latestHunkSearch = found;
+    const stats = found.summary;
+    snapshotHunkSearchSummary.textContent =
+      stats.matching_rows_in_inspected_scope + ' matching changed rows among ' +
+      stats.inspected_changed_rows + ' scanned; ' +
+      stats.stored_results + ' previews retained' +
+      (stats.omitted_matching_rows ? ', ' +
+        stats.omitted_matching_rows + ' additional matches not shown' : '') +
+      (stats.incomplete ? '. INCOMPLETE SEARCH: ' +
+        stats.uninspected_changed_rows + ' changed rows were not searched.' :
+        '. All changed lines in this scope were searched.') +
+      ' Open any result to inspect its exact hunk and page.';
+    const fragment = document.createDocumentFragment();
+    if (!found.results.length) {
+      const tr = document.createElement('tr');
+      const td = cell('td','No matches in the inspected changed lines.','empty');
+      td.colSpan = 9;
+      tr.append(td);
+      fragment.append(tr);
+    } else for (const hit of found.results) {
+      const tr = document.createElement('tr');
+      for (const value of [
+        hit.editor_label, hit.change_type, hit.match_side,
+        hit.hunk_index + ' / ' + hit.hunk_page,
+        hit.from_line === null ? '—' : String(hit.from_line),
+        hit.from_present ? hit.from_preview : '(not present)',
+        hit.to_line === null ? '—' : String(hit.to_line),
+        hit.to_present ? hit.to_preview : '(not present)'
+      ]) tr.append(cell('td',value));
+      const action = document.createElement('td');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'button subtle';
+      button.textContent = 'Open hunk page';
+      button.addEventListener('click', () => openHunkSearchHit(hit));
+      action.append(button);
+      tr.append(action);
+      fragment.append(tr);
+    }
+    snapshotHunkSearchRows.replaceChildren(fragment);
+    snapshotHunkSearchResults.hidden = false;
+    snapshotHunkSearchJson.disabled = false;
+    snapshotHunkSearchCsv.disabled = false;
+    snapshotCompareMessage('Changed-line search completed locally. Results contain snippets only.');
+  } catch (error) {
+    clearHunkSearch();
+    snapshotCompareMessage('Changed-line search failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotHunkSearchJson.addEventListener('click', () => {
+  if (!latestHunkSearch || !ensureLiveSnapshotComparisonFresh('raw')) return;
+  try {
+    downloadReport(serializeChangedLineSearchJson(latestHunkSearch),
+      'snapshot-changed-line-search.json','application/json;charset=utf-8');
+    snapshotCompareMessage('Search JSON download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('Search JSON export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotHunkSearchCsv.addEventListener('click', () => {
+  if (!latestHunkSearch || !ensureLiveSnapshotComparisonFresh('raw')) return;
+  try {
+    downloadReport(serializeChangedLineSearchCsv(latestHunkSearch),
+      'snapshot-changed-line-search.csv','text/csv;charset=utf-8');
+    snapshotCompareMessage('Search CSV download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('Search CSV export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
 function clearHunkInspection() {
   latestHunkInspection = null;
   snapshotHunkInspection.hidden = true;
@@ -1098,6 +1235,8 @@ function renderSnapshotComparison() {
   }
   snapshotCompareSections.replaceChildren(fragment);
   renderSnapshotRawHunkChooser(report);
+  clearHunkSearch();
+  refreshHunkSearchControl();
   clearHunkInspection();
   snapshotHunkIndex.value = '1';
   snapshotHunkPage.value = '1';
