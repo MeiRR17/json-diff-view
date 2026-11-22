@@ -607,7 +607,7 @@ workspaceCollectionExport.addEventListener('click', () => {
     const items = sessionSnapshots.list().map(item => sessionSnapshots.read(item.id));
     const content = serializeSnapshotCollection(items);
     downloadReport(content, 'json-diff-view-session-collection.json',
-      'application/json;charset=utf-8');
+      'application/json;charset=utf-8', MAX_COLLECTION_BYTES);
     workspaceMessage('Collection export initiated with ' + items.length +
       ' snapshots. Check your browser Downloads folder.');
   } catch (error) {
@@ -3701,9 +3701,10 @@ document.addEventListener('keydown', event => {
   }
 });
 
-function downloadReport(text, name, mimeType) {
-  if (new TextEncoder().encode(text).byteLength > MAX_REPORT_EXPORT_BYTES) {
-    throw new RangeError('Full report exceeds 8 MiB. Narrow the input documents and compare again.');
+function downloadReport(text, name, mimeType, maxBytes = MAX_REPORT_EXPORT_BYTES) {
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw new RangeError('Download exceeds the ' +
+      (maxBytes / (1024 * 1024)) + ' MiB export limit.');
   }
   const blob = new Blob([text], { type: mimeType });
   const url = URL.createObjectURL(blob);
