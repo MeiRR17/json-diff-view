@@ -25,6 +25,15 @@ const workspaceSaveButton = document.querySelector('#download-workspace');
 const workspaceOpenButton = document.querySelector('#import-workspace');
 const workspaceFile = document.querySelector('#workspace-file');
 const workspaceStatus = document.querySelector('#workspace-status');
+const workspacePreview = document.querySelector('#workspace-preview');
+const workspacePreviewSummary = document.querySelector('#workspace-preview-summary');
+const workspacePreviewRows = document.querySelector('#workspace-preview-rows');
+const workspaceRestoreBefore = document.querySelector('#workspace-restore-before');
+const workspaceRestoreAfter = document.querySelector('#workspace-restore-after');
+const workspaceRestorePatch = document.querySelector('#workspace-restore-patch');
+const workspaceRestoreOptions = document.querySelector('#workspace-restore-options');
+const workspaceApplyButton = document.querySelector('#apply-workspace');
+const workspaceCancelButton = document.querySelector('#cancel-workspace');
 const afterEditor = document.querySelector('#after');
 const status = document.querySelector('#status');
 const summary = document.querySelector('#summary');
@@ -262,6 +271,7 @@ let impactPage = 0;
 let patchImportSequence = 0;
 let bundleImportSequence = 0;
 let workspaceImportSequence = 0;
+let stagedWorkspace = null;
 let latestInspection = null;
 let inspectionPage = 0;
 let latestStep = null;
@@ -299,6 +309,18 @@ function currentWorkspaceValues() {
     stepCount: stepCountInput.value
   };
 }
+const workspaceSections = [
+  { name: 'Before', checkbox: workspaceRestoreBefore, keys: ['beforeText'] },
+  { name: 'After', checkbox: workspaceRestoreAfter, keys: ['afterText'] },
+  { name: 'JSON Patch', checkbox: workspaceRestorePatch, keys: ['patchText'] },
+  {
+    name: 'Patch and range settings', checkbox: workspaceRestoreOptions,
+    keys: [
+      'patchBase', 'patchDirection', 'guardPatch', 'guardRangePatch',
+      'rangeStart', 'rangeEnd', 'stepCount'
+    ]
+  }
+];
 function workspaceChanged(a, b) {
   return Object.keys(a).some(key => a[key] !== b[key]);
 }
@@ -306,15 +328,96 @@ function workspaceMessage(message, error = false) {
   workspaceStatus.textContent = message;
   workspaceStatus.classList.toggle('error', error);
 }
-// Any user input during a pending file read cancels that import, including
-// edit-and-revert sequences that end with identical text.
+function clearWorkspaceStaging() {
+  stagedWorkspace = null;
+  workspacePreview.hidden = true;
+  workspacePreviewSummary.textContent = '';
+  workspacePreviewRows.replaceChildren();
+  workspaceApplyButton.disabled = true;
+}
+function discardWorkspaceStaging(message = '') {
+  workspaceImportSequence++;
+  const hadPreview = stagedWorkspace !== null;
+  clearWorkspaceStaging();
+  if (hadPreview && message) workspaceMessage(message);
+}
+function workspaceSectionChanges(section, current, incoming) {
+  return section.keys.filter(key => current[key] !== incoming[key]).length;
+}
+function rawTextSize(value) {
+  return new TextEncoder().encode(value).byteLength;
+}
+function formatBytes(bytes) {
+  return bytes.toLocaleString() + ' bytes';
+}
+function refreshWorkspacePreview() {
+  const staged = stagedWorkspace;
+  if (!staged) return;
+  const { values, snapshot, name } = staged;
+  const fragment = document.createDocumentFragment();
+  let selected = 0, changed = 0;
+  for (const section of workspaceSections) {
+    const differences = workspaceSectionChanges(section, snapshot, values);
+    const selectedSection = section.checkbox.checked;
+    if (selectedSection) {
+      selected++;
+      if (differences) changed++;
+    }
+    const row = document.createElement('tr');
+    const choice = document.createElement('td');
+    const textLabel = document.createElement('label');
+    textLabel.className = 'workspace-preview-choice';
+    const checkbox = section.checkbox;
+    // Reuse the checkbox control outside the table; this label focuses it
+    // without relocating it and removing its original accessible label.
+    textLabel.textContent = section.name;
+    choice.append(textLabel);
+    let details;
+    if (section.keys.length === 1) {
+      const key = section.keys[0];
+      details = formatBytes(rawTextSize(snapshot[key])) + ' → ' +
+        formatBytes(rawTextSize(values[key]));
+    } else {
+      details = section.keys.length + ' settings; ' +
+        differences + ' different';
+    }
+    row.append(choice);
+    row.append(document.createElement('td'));
+    row.children[1].textContent = details;
+    row.append(document.createElement('td'));
+    row.children[2].textContent = differences ?
+      'Will replace if selected' : 'Identical';
+    fragment.append(row);
+  }
+  workspacePreviewRows.replaceChildren(fragment);
+  workspaceApplyButton.disabled = selected === 0;
+  workspacePreviewSummary.textContent =
+    'Loaded local file “' + name + '”. ' + selected +
+    ' of 4 sections selected (' + changed +
+    ' contain changes). The table shows only lengths and settings counts, ' +
+    'not the draft contents. No editor has been changed and no patch was run.';
+}
+function stageWorkspace(values, name, snapshot) {
+  clearWorkspaceStaging();
+  stagedWorkspace = { values, name, snapshot };
+  for (const section of workspaceSections) section.checkbox.checked = true;
+  workspacePreview.hidden = false;
+  refreshWorkspacePreview();
+}
+for (const section of workspaceSections) {
+  section.checkbox.addEventListener('change', refreshWorkspacePreview);
+}
+// Editing an editor or setting invalidates a staged import. It also cancels
+// an in-flight file read, including edit-and-revert sequences.
 for (const field of [beforeEditor, afterEditor, patchSource,
   rangeStartInput, rangeEndInput, stepCountInput]) {
-  field.addEventListener('input', () => { workspaceImportSequence++; });
+  field.addEventListener('input', () => discardWorkspaceStaging(
+    'Workspace preview canceled because the current work changed. Open the file again.'));
 }
 for (const control of [patchBase, patchDirection, guardPatchCheckbox,
   guardRangePatchCheckbox]) {
-  control.addEventListener('change', () => { workspaceImportSequence++; });
+  control.addEventListener('change', () => discardWorkspaceStaging(
+    'Workspace preview canceled because the current work changed. Open the file again.'));
 }
 workspaceSaveButton.addEventListener('click', () => {
   try {
@@ -333,66 +436,103 @@ workspaceFile.addEventListener('change', event => {
   event.target.value = '';
   if (file) void importWorkspace(file);
 });
+workspaceCancelButton.addEventListener('click', () => {
+  discardWorkspaceStaging('Workspace restore canceled. No editor was modified.');
+});
 async function importWorkspace(file) {
+  discardWorkspaceStaging();
   if (file.size > MAX_REPORT_EXPORT_BYTES) {
     workspaceMessage('Workspace file exceeds the 8 MiB limit.', true);
     return;
   }
   const request = ++workspaceImportSequence;
-  // The selected workspace supersedes outstanding source, patch and
-  // checkpoint/failure imports; later imports also supersede this request.
+  // A newly selected file supersedes outstanding source, patch and bundle
+  // imports. The preview is read-only until Apply selected is clicked.
   invalidateAllEditorImports();
   const beforeVersion = editorImportVersions.get(beforeEditor);
   const afterVersion = editorImportVersions.get(afterEditor);
   const patchVersion = ++patchImportSequence;
   const bundleVersion = ++bundleImportSequence;
-  const initial = currentWorkspaceValues();
+  const snapshot = currentWorkspaceValues();
   const current = () => request === workspaceImportSequence &&
     beforeVersion === editorImportVersions.get(beforeEditor) &&
     afterVersion === editorImportVersions.get(afterEditor) &&
     patchVersion === patchImportSequence &&
     bundleVersion === bundleImportSequence &&
-    !workspaceChanged(initial, currentWorkspaceValues());
-  workspaceMessage('Reading workspace from local file. No JSON or patch is executed.');
+    !workspaceChanged(snapshot, currentWorkspaceValues());
+  workspaceMessage('Reading workspace locally. No editor has been modified.');
   try {
     const text = await file.text();
     if (!current()) return;
     const restored = parseWorkspace(text);
-    // This file controls three editors and several options. Require explicit
-    // approval even when there is no existing editor content.
-    if (!confirm('Restore this workspace? This will replace Before, After, ' +
-      'the patch text and patch/range settings. Unsaved edits will be lost. ' +
-      'No comparison or patch will run automatically.')) {
-      workspaceMessage('Workspace import canceled; editors were not changed.');
-      return;
-    }
     if (!current()) return;
-    invalidateAllEditorImports();
-    patchImportSequence++;
-    bundleImportSequence++;
-    beforeEditor.value = restored.beforeText;
-    afterEditor.value = restored.afterText;
-    patchSource.value = restored.patchText;
-    patchBase.value = restored.patchBase;
-    patchDirection.value = restored.patchDirection;
-    guardPatchCheckbox.checked = restored.guardPatch;
-    guardRangePatchCheckbox.checked = restored.guardRangePatch;
-    rangeStartInput.value = restored.rangeStart;
-    rangeEndInput.value = restored.rangeEnd;
-    stepCountInput.value = restored.stepCount;
-    invalidateInspection();
-    resetReport();
-    invalidateImportedFailure('Workspace restored. Import a failure bundle to verify one.');
-    updateResultTarget();
-    setStatus('Workspace restored. Select Compare JSON to process the editor drafts.');
-    patchMessage('Raw patch text restored. Select Preview applying patch to run it explicitly.');
-    workspaceMessage('Workspace restored locally. Drafts and settings preserved; ' +
-      'no JSON was parsed and no patch was executed.');
+    stageWorkspace(restored, file.name, snapshot);
+    workspaceMessage('Workspace ready for review. Choose sections and Apply selected.');
   } catch (error) {
     if (current()) workspaceMessage('Could not open workspace: ' +
       (error instanceof Error ? error.message : 'invalid workspace'), true);
   }
 }
+workspaceApplyButton.addEventListener('click', () => {
+  const staged = stagedWorkspace;
+  if (!staged) return;
+  const selected = workspaceSections.filter(section => section.checkbox.checked);
+  if (!selected.length) {
+    workspaceMessage('Select at least one workspace section to restore.', true);
+    return;
+  }
+  // User and competing file imports may update values programmatically
+  // without dispatching input/change events. Never overwrite such changes
+  // using a stale preview.
+  if (workspaceChanged(staged.snapshot, currentWorkspaceValues())) {
+    discardWorkspaceStaging(
+      'Current editor contents or settings changed. Open the workspace again.');
+    return;
+  }
+  const changes = selected.filter(section =>
+    workspaceSectionChanges(section, staged.snapshot, staged.values) > 0);
+  if (!changes.length) {
+    discardWorkspaceStaging('Selected sections are already identical. No changes made.');
+    return;
+  }
+  if (!confirm('Restore ' + changes.map(section => section.name).join(', ') +
+      '? Only checked sections will be replaced; unsaved changes in those ' +
+      'sections will be lost. No JSON comparison or patch execution will run.')) {
+    workspaceMessage('Restore not applied. Change your selection or cancel.');
+    return;
+  }
+  if (workspaceChanged(staged.snapshot, currentWorkspaceValues())) {
+    discardWorkspaceStaging('Current values changed before restore. Open the file again.');
+    return;
+  }
+  // Commit selected replacements as one user-approved action. Cancel any
+  // outstanding asynchronous editor/patch/bundle imports first.
+  discardWorkspaceStaging();
+  invalidateAllEditorImports();
+  patchImportSequence++;
+  bundleImportSequence++;
+  const data = staged.values;
+  if (workspaceRestoreBefore.checked) beforeEditor.value = data.beforeText;
+  if (workspaceRestoreAfter.checked) afterEditor.value = data.afterText;
+  if (workspaceRestorePatch.checked) patchSource.value = data.patchText;
+  if (workspaceRestoreOptions.checked) {
+    patchBase.value = data.patchBase;
+    patchDirection.value = data.patchDirection;
+    guardPatchCheckbox.checked = data.guardPatch;
+    guardRangePatchCheckbox.checked = data.guardRangePatch;
+    rangeStartInput.value = data.rangeStart;
+    rangeEndInput.value = data.rangeEnd;
+    stepCountInput.value = data.stepCount;
+  }
+  invalidateInspection();
+  resetReport();
+  invalidateImportedFailure('Workspace sections restored. Import a failure bundle to verify one.');
+  updateResultTarget();
+  setStatus('Selected workspace sections restored. Compare JSON to refresh the report.');
+  patchMessage('Prior patch preview cleared. Run Preview applying patch explicitly.');
+  workspaceMessage('Selected workspace sections restored. Other sections were preserved. ' +
+    'No JSON was parsed and no patch was executed.');
+});
 
 function fitInput(source, label) {
   const size = new TextEncoder().encode(source).byteLength;

@@ -54,9 +54,30 @@
         <button class="button subtle" type="button" id="download-workspace">↓ Save workspace</button>
         <button class="button subtle" type="button" id="import-workspace">↑ Open workspace</button>
         <input id="workspace-file" type="file" accept=".json,application/json" hidden>
-        <span class="hint">Includes all three raw editor drafts and patch/range settings. No JSON is validated or patch executed on restore.</span>
+        <span class="hint">Includes three raw editor drafts and patch/range settings. Opening a workspace previews the changes; you choose which sections to restore.</span>
       </div>
-      <p id="workspace-status" class="hint" role="status" aria-live="polite">Save your current workspace as a local JSON file; restoring requires confirmation.</p>
+      <p id="workspace-status" class="hint" role="status" aria-live="polite">Select a saved workspace file to preview and restore chosen sections.</p>
+      <section class="workspace-preview" id="workspace-preview" aria-labelledby="workspace-preview-heading" hidden>
+        <h2 id="workspace-preview-heading">Review workspace restore</h2>
+        <p id="workspace-preview-summary" class="hint" role="status" aria-live="polite"></p>
+        <p class="hint">Choose which sections to restore. Your existing text stays unchanged until you confirm. Editor contents are never parsed or executed during this review.</p>
+        <div class="workspace-choices" role="group" aria-label="Choose workspace sections to restore">
+          <label><input type="checkbox" id="workspace-restore-before" checked> Before editor</label>
+          <label><input type="checkbox" id="workspace-restore-after" checked> After editor</label>
+          <label><input type="checkbox" id="workspace-restore-patch" checked> JSON Patch editor</label>
+          <label><input type="checkbox" id="workspace-restore-options" checked> Patch and range settings</label>
+        </div>
+        <div class="results-scroll">
+          <table class="diff-table">
+            <thead><tr><th scope="col">Section</th><th scope="col">Current → saved</th><th scope="col">Impact</th></tr></thead>
+            <tbody id="workspace-preview-rows"></tbody>
+          </table>
+        </div>
+        <div class="workspace-preview-actions">
+          <button class="button primary" type="button" id="apply-workspace" disabled>Apply selected sections</button>
+          <button class="button subtle" type="button" id="cancel-workspace">Cancel restore</button>
+        </div>
+      </section>
       <p id="status" class="status" aria-live="polite" role="status">Paste two JSON documents or load a sample to begin.</p>
     </section>
     <section id="results" aria-labelledby="results-heading">
