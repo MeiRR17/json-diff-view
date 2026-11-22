@@ -336,3 +336,15 @@ a{color:#155a98}
 .evidence-history-inputs select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
 @media(max-width:700px){.evidence-history-inputs select{flex:1 1 170px}}
 @media(prefers-color-scheme:dark){.evidence-history-inputs select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Select any ordered pair from a loaded history without changing its mode. */
+.evidence-history-custom{margin:16px 0 20px;padding:13px 0;border-top:1px solid #d8e1ed}
+.evidence-history-custom .hint{overflow-wrap:anywhere}
+.evidence-history-custom-controls{display:grid;grid-template-columns:120px minmax(0,1fr);gap:9px 12px;align-items:center}
+.evidence-history-custom-controls label{font-size:.84rem;font-weight:650;color:#3d5471}
+.evidence-history-custom-controls select{font:inherit;min-width:0;width:100%;max-width:100%;min-height:38px;padding:7px 9px;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px}
+.evidence-history-custom-controls select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+.evidence-history-custom-controls .button{grid-column:2;justify-self:start}
+#evidence-history-custom-status.error{color:#923d22;font-weight:650}
+@media(max-width:700px){.evidence-history-custom-controls{grid-template-columns:1fr}.evidence-history-custom-controls .button{grid-column:auto;width:100%}}
+@media(prefers-color-scheme:dark){.evidence-history-custom{border-color:#3b5068}.evidence-history-custom-controls label{color:#b6cce3}.evidence-history-custom-controls select{color:#e3f1ff;background:#19293b;border-color:#536783}#evidence-history-custom-status.error{color:#ffb6a0}}

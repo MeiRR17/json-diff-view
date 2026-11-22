@@ -255,6 +255,17 @@
               <option value="unchanged">Unchanged</option>
             </select>
           </div>
+          <div class="evidence-history-custom" role="group" aria-label="Compare any two loaded history snapshots">
+            <p class="hint">Compare any two loaded files in filename order, including nonadjacent snapshots. This opens a separate detail report; it does not change the history mode, transition summaries, or exports.</p>
+            <div class="evidence-history-custom-controls">
+              <label for="evidence-history-custom-from">Earlier snapshot</label>
+              <select id="evidence-history-custom-from" disabled></select>
+              <label for="evidence-history-custom-to">Later snapshot</label>
+              <select id="evidence-history-custom-to" disabled></select>
+              <button class="button subtle" id="compare-evidence-history-custom" type="button" disabled>Compare chosen snapshots</button>
+            </div>
+            <p id="evidence-history-custom-status" class="hint" role="status" aria-live="polite">Analyze an archive history to select snapshots.</p>
+          </div>
           <div class="results-scroll">
             <table class="diff-table">
               <thead><tr><th scope="col">Baseline file</th><th scope="col">Candidate file</th><th scope="col">Classification</th><th scope="col">Reported status</th><th scope="col">Failure identity</th><th scope="col">Changes</th><th scope="col">Inspect comparison</th></tr></thead>
@@ -263,14 +274,14 @@
           </div>
           <section class="evidence-history-detail" id="evidence-history-detail" aria-labelledby="evidence-history-detail-heading" hidden>
             <div class="section-heading">
-              <h4 id="evidence-history-detail-heading">Selected transition details</h4>
+              <h4 id="evidence-history-detail-heading">Selected snapshot comparison</h4>
               <div class="result-actions">
                 <button class="button subtle" id="copy-evidence-history-detail" type="button" disabled>Copy full detail</button>
                 <button class="button subtle" id="download-evidence-history-detail-json" type="button" disabled>↓ Detail JSON</button>
                 <button class="button subtle" id="download-evidence-history-detail-csv" type="button" disabled>↓ Detail CSV</button>
               </div>
             </div>
-            <p class="hint">This shows the selected saved-evidence pair, using the analysis mode (consecutive or first baseline). It is not a fresh replay, independent authentication, or proof of a regression.</p>
+            <p class="hint">Shows the selected saved-evidence pair: adjacent, first baseline or custom snapshots. It is not a fresh replay, independent authentication, or proof of a regression.</p>
             <p class="evidence-history-detail-summary" id="evidence-history-detail-summary" role="status" aria-live="polite"></p>
             <div class="evidence-history-detail-filters" role="group" aria-label="Filter selected transition detail">
               <label for="evidence-history-detail-path">Report path contains</label>

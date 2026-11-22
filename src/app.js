@@ -187,6 +187,10 @@ const evidenceHistoryRows = document.querySelector('#evidence-history-rows');
 const evidenceHistoryFilter = document.querySelector('#evidence-history-filter');
 const evidenceHistoryMode = document.querySelector('#evidence-history-mode');
 const evidenceHistoryTableTitle = document.querySelector('#evidence-history-table-title');
+const evidenceHistoryCustomFrom = document.querySelector('#evidence-history-custom-from');
+const evidenceHistoryCustomTo = document.querySelector('#evidence-history-custom-to');
+const evidenceHistoryCustomRun = document.querySelector('#compare-evidence-history-custom');
+const evidenceHistoryCustomStatus = document.querySelector('#evidence-history-custom-status');
 const evidenceHistoryCopyButton = document.querySelector('#copy-evidence-history');
 const evidenceHistoryJsonButton = document.querySelector('#download-evidence-history-json');
 const evidenceHistoryCsvButton = document.querySelector('#download-evidence-history-csv');
@@ -1281,8 +1285,9 @@ function historyMessage(message, error = false) {
   evidenceHistoryStatus.classList.toggle('error', error);
 }
 // Individual history comparisons are inspected only on user request.
-// Saved-file handles are retained for reading selected pairs (adjacent or
-// first-baseline), while history JSON/CSV exports stay summarized.
+// Saved-file handles are retained for reading selected pairs (adjacent,
+// first-baseline, or arbitrary older/newer selections), while history JSON/CSV
+// exports stay summarized.
 function invalidateHistoryDetail() {
   historyDetailRequest++;
   latestEvidenceHistoryDetail = null;
@@ -1363,49 +1368,108 @@ function renderHistoryDetail() {
   }
   evidenceHistoryDetailRows.replaceChildren(fragment);
 }
-async function openHistoryTransition(index) {
+async function openHistoryPair(fromIndex, toIndex, kind = 'custom') {
   const history = latestEvidenceHistory;
   const files = latestEvidenceHistoryFiles;
-  if (!history || !files || !Number.isSafeInteger(index) ||
-      index < 0 || index >= history.transitions.length) return;
+  if (!history || !files ||
+      !Number.isSafeInteger(fromIndex) || !Number.isSafeInteger(toIndex) ||
+      fromIndex < 0 || fromIndex >= toIndex || toIndex >= files.length ||
+      !['custom', 'adjacent', 'baseline'].includes(kind)) {
+    historyMessage('Choose two different history snapshots in chronological order.', true);
+    return;
+  }
   invalidateHistoryDetail();
   const request = historyDetailRequest;
   const generation = evidenceHistoryGeneration;
   const valid = () => request === historyDetailRequest &&
     generation === evidenceHistoryGeneration &&
     history === latestEvidenceHistory && files === latestEvidenceHistoryFiles;
-  const baselineIndex = history.comparison_mode === 'baseline' ? 0 : index;
-  const from = files[baselineIndex], to = files[index + 1];
-  historyMessage('Reading selected evidence pair locally…');
+  const from = files[fromIndex], to = files[toIndex];
+  if (from.size > MAX_REPORT_EXPORT_BYTES || to.size > MAX_REPORT_EXPORT_BYTES) {
+    historyMessage('Selected evidence files exceed the 8 MiB input limit.', true);
+    return;
+  }
+  historyMessage('Reading the two selected evidence snapshots locally…');
   try {
     const [beforeText, afterText] = await Promise.all([from.text(), to.text()]);
     if (!valid()) return;
     const comparison = compareVerificationArchives(beforeText, afterText);
     if (!valid()) return;
     latestEvidenceHistoryDetail = {
-      history, files, index, from: from.name, to: to.name, comparison,
-      mode: history.comparison_mode
+      history, files, fromIndex, toIndex, from: from.name, to: to.name,
+      comparison, mode: kind, index: toIndex - 1
     };
     evidenceHistoryDetailCopyButton.disabled = false;
     evidenceHistoryDetailJsonButton.disabled = false;
     evidenceHistoryDetailCsvButton.disabled = false;
     renderHistoryDetail();
-    historyMessage('Opened the selected saved-evidence comparison (' +
-      (history.comparison_mode === 'baseline' ? 'first baseline' : 'adjacent') +
+    historyMessage('Opened archived evidence snapshot ' + (fromIndex + 1) +
+      ' against ' + (toIndex + 1) + ' (' + kind +
       '). No patch was replayed.');
     evidenceHistoryDetailPanel.scrollIntoView({ block: 'nearest' });
   } catch (error) {
-    if (valid()) historyMessage('Could not inspect this history transition: ' +
+    if (valid()) historyMessage('Could not inspect this saved evidence pair: ' +
       (error instanceof Error ? error.message : 'invalid evidence'), true);
   }
 }
+function openHistoryTransition(index) {
+  const history = latestEvidenceHistory;
+  if (!history || !Number.isSafeInteger(index) ||
+      index < 0 || index >= history.transitions.length) return;
+  const fromIndex = history.comparison_mode === 'baseline' ? 0 : index;
+  void openHistoryPair(fromIndex, index + 1, history.comparison_mode);
+}
+/** Populate selects only after the archive history is successfully loaded. */
+function setupHistoryCustomPair(files) {
+  evidenceHistoryCustomFrom.replaceChildren();
+  evidenceHistoryCustomTo.replaceChildren();
+  for (let i = 0; i < files.length; i++) {
+    for (const control of [evidenceHistoryCustomFrom, evidenceHistoryCustomTo]) {
+      const option = document.createElement('option');
+      option.value = String(i);
+      option.textContent = (i + 1) + '. ' + files[i].name;
+      control.append(option);
+    }
+  }
+  evidenceHistoryCustomFrom.value = '0';
+  evidenceHistoryCustomTo.value = String(files.length - 1);
+  refreshHistoryCustomPair();
+}
+function refreshHistoryCustomPair() {
+  const files = latestEvidenceHistoryFiles;
+  const fromIndex = Number(evidenceHistoryCustomFrom.value);
+  const toIndex = Number(evidenceHistoryCustomTo.value);
+  const valid = !!files && Number.isSafeInteger(fromIndex) &&
+    Number.isSafeInteger(toIndex) && fromIndex >= 0 &&
+    fromIndex < toIndex && toIndex < files.length;
+  // A selection change invalidates an already-open detail, and cancels any
+  // pending async read before it can replace the newly selected pair.
+  invalidateHistoryDetail();
+  evidenceHistoryCustomRun.disabled = !valid;
+  evidenceHistoryCustomStatus.textContent = !files ?
+    'Analyze an archive history to select snapshots.' :
+    !valid ? 'Select an earlier snapshot on the left and a later one on the right.' :
+      'Ready to compare snapshot ' + (fromIndex + 1) + ' against ' +
+      (toIndex + 1) + '. The history summaries will not change.';
+  evidenceHistoryCustomStatus.classList.toggle('error', !!files && !valid);
+}
+evidenceHistoryCustomFrom.addEventListener('change', refreshHistoryCustomPair);
+evidenceHistoryCustomTo.addEventListener('change', refreshHistoryCustomPair);
+evidenceHistoryCustomRun.addEventListener('click', () => {
+  if (!latestEvidenceHistoryFiles) return;
+  const fromIndex = Number(evidenceHistoryCustomFrom.value);
+  const toIndex = Number(evidenceHistoryCustomTo.value);
+  void openHistoryPair(fromIndex, toIndex, 'custom');
+});
 function historyDetailJson(entry) {
   return JSON.stringify({
     format: 'json-diff-view-history-transition-detail',
     version: 1,
     archived_not_reverified: true,
-    history_pair_index: entry.index + 1,
+    history_pair_index: entry.mode === 'custom' ? null : entry.index + 1,
     comparison_mode: entry.mode,
+    baseline_snapshot_index: entry.fromIndex + 1,
+    candidate_snapshot_index: entry.toIndex + 1,
     from_file: entry.from,
     to_file: entry.to,
     same_failure_identity: entry.comparison.sameCase,
@@ -1460,12 +1524,13 @@ function exportHistoryDetail(format) {
   if (!entry) return;
   try {
     const csv = format === 'csv';
+    const pairLabel = (entry.fromIndex + 1) + '-to-' + (entry.toIndex + 1);
     const text = csv ? serializeReportCsv(entry.comparison.report, {
-      source: 'Archived history pair ' + (entry.index + 1) +
-        ' (not reverified; ' + entry.comparison.assessment.classification + ')'
+      source: 'Archived history pair ' + pairLabel + ' [' + entry.mode +
+        '] (not reverified; ' + entry.comparison.assessment.classification + ')'
     }) : historyDetailJson(entry);
     downloadReport(text,
-      'evidence-history-transition-' + (entry.index + 1) + '.' + format,
+      'evidence-history-' + entry.mode + '-' + pairLabel + '.' + format,
       csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
     historyMessage('Full history transition downloaded as ' +
       format.toUpperCase() + (entry.comparison.report.truncated ?
@@ -1486,6 +1551,12 @@ function invalidateEvidenceHistory() {
   latestEvidenceHistory = null;
   latestEvidenceHistoryFiles = null;
   evidenceHistoryPanel.hidden = true;
+  evidenceHistoryCustomFrom.replaceChildren();
+  evidenceHistoryCustomTo.replaceChildren();
+  evidenceHistoryCustomRun.disabled = true;
+  evidenceHistoryCustomStatus.textContent =
+    'Analyze an archive history to select snapshots.';
+  evidenceHistoryCustomStatus.classList.remove('error');
   evidenceHistoryTableTitle.textContent = 'Consecutive evidence transitions';
   evidenceHistoryRows.replaceChildren();
   evidenceHistorySummary.textContent = '';
@@ -1590,6 +1661,7 @@ evidenceHistoryRunButton.addEventListener('click', async () => {
     if (request !== evidenceHistoryGeneration) return;
     latestEvidenceHistory = history;
     latestEvidenceHistoryFiles = selected;
+    setupHistoryCustomPair(selected);
     renderEvidenceHistory();
     evidenceHistoryCopyButton.disabled = false;
     evidenceHistoryJsonButton.disabled = false;
