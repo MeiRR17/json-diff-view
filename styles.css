@@ -330,3 +330,9 @@ a{color:#155a98}
 #evidence-history-rows td .button{white-space:nowrap;max-width:100%;font-size:.8rem}
 @media(max-width:700px){.evidence-history-detail .result-actions{width:100%;justify-content:flex-start}.evidence-history-detail-filters label{width:100%}.evidence-history-detail-filters select{flex:1 1 170px}}
 @media(prefers-color-scheme:dark){.evidence-history-detail{border-color:#3b5068}.evidence-history-detail-summary,.evidence-history-detail-filters label{color:#b6cce3}.evidence-history-detail-filters input,.evidence-history-detail-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* First-baseline vs consecutive history comparison selector. */
+.evidence-history-inputs select{font:inherit;min-height:38px;padding:8px 10px;max-width:100%;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px}
+.evidence-history-inputs select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+@media(max-width:700px){.evidence-history-inputs select{flex:1 1 170px}}
+@media(prefers-color-scheme:dark){.evidence-history-inputs select{color:#e3f1ff;background:#19293b;border-color:#536783}}

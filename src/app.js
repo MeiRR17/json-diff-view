@@ -185,6 +185,8 @@ const evidenceHistoryPanel = document.querySelector('#evidence-history-results')
 const evidenceHistorySummary = document.querySelector('#evidence-history-summary');
 const evidenceHistoryRows = document.querySelector('#evidence-history-rows');
 const evidenceHistoryFilter = document.querySelector('#evidence-history-filter');
+const evidenceHistoryMode = document.querySelector('#evidence-history-mode');
+const evidenceHistoryTableTitle = document.querySelector('#evidence-history-table-title');
 const evidenceHistoryCopyButton = document.querySelector('#copy-evidence-history');
 const evidenceHistoryJsonButton = document.querySelector('#download-evidence-history-json');
 const evidenceHistoryCsvButton = document.querySelector('#download-evidence-history-csv');
@@ -1278,9 +1280,9 @@ function historyMessage(message, error = false) {
   evidenceHistoryStatus.textContent = message;
   evidenceHistoryStatus.classList.toggle('error', error);
 }
-// Individual history transitions are inspected only on user request.
-// Saved-file handles are retained for reading selected adjacent pairs, while
-// history JSON/CSV exports remain small, summarized and independent of them.
+// Individual history comparisons are inspected only on user request.
+// Saved-file handles are retained for reading selected pairs (adjacent or
+// first-baseline), while history JSON/CSV exports stay summarized.
 function invalidateHistoryDetail() {
   historyDetailRequest++;
   latestEvidenceHistoryDetail = null;
@@ -1372,21 +1374,25 @@ async function openHistoryTransition(index) {
   const valid = () => request === historyDetailRequest &&
     generation === evidenceHistoryGeneration &&
     history === latestEvidenceHistory && files === latestEvidenceHistoryFiles;
-  const from = files[index], to = files[index + 1];
-  historyMessage('Reading selected adjacent evidence files locally…');
+  const baselineIndex = history.comparison_mode === 'baseline' ? 0 : index;
+  const from = files[baselineIndex], to = files[index + 1];
+  historyMessage('Reading selected evidence pair locally…');
   try {
     const [beforeText, afterText] = await Promise.all([from.text(), to.text()]);
     if (!valid()) return;
     const comparison = compareVerificationArchives(beforeText, afterText);
     if (!valid()) return;
     latestEvidenceHistoryDetail = {
-      history, files, index, from: from.name, to: to.name, comparison
+      history, files, index, from: from.name, to: to.name, comparison,
+      mode: history.comparison_mode
     };
     evidenceHistoryDetailCopyButton.disabled = false;
     evidenceHistoryDetailJsonButton.disabled = false;
     evidenceHistoryDetailCsvButton.disabled = false;
     renderHistoryDetail();
-    historyMessage('Opened the selected saved-evidence transition. No patch was replayed.');
+    historyMessage('Opened the selected saved-evidence comparison (' +
+      (history.comparison_mode === 'baseline' ? 'first baseline' : 'adjacent') +
+      '). No patch was replayed.');
     evidenceHistoryDetailPanel.scrollIntoView({ block: 'nearest' });
   } catch (error) {
     if (valid()) historyMessage('Could not inspect this history transition: ' +
@@ -1399,6 +1405,7 @@ function historyDetailJson(entry) {
     version: 1,
     archived_not_reverified: true,
     history_pair_index: entry.index + 1,
+    comparison_mode: entry.mode,
     from_file: entry.from,
     to_file: entry.to,
     same_failure_identity: entry.comparison.sameCase,
@@ -1479,6 +1486,7 @@ function invalidateEvidenceHistory() {
   latestEvidenceHistory = null;
   latestEvidenceHistoryFiles = null;
   evidenceHistoryPanel.hidden = true;
+  evidenceHistoryTableTitle.textContent = 'Consecutive evidence transitions';
   evidenceHistoryRows.replaceChildren();
   evidenceHistorySummary.textContent = '';
   evidenceHistoryFilter.value = 'all';
@@ -1494,15 +1502,22 @@ function renderEvidenceHistory() {
     t.classification === evidenceHistoryFilter.value
   );
   evidenceHistoryPanel.hidden = false;
+  const fixedBaseline = history.comparison_mode === 'baseline';
+  evidenceHistoryTableTitle.textContent = fixedBaseline ?
+    'Comparison against first saved evidence' : 'Consecutive evidence transitions';
   evidenceHistorySummary.textContent =
     history.summary.archives + ' archived snapshots, ' +
-    history.summary.transitions + ' consecutive transitions. ' +
+    history.summary.transitions +
+    (fixedBaseline ? ' comparisons to first archive (' +
+      history.baseline_file + '). ' : ' consecutive transitions. ') +
     history.summary.reproduced_claims + ' archives claimed reproduction, ' +
     history.summary.different_failure_identities +
     ' comparisons crossed different failure identities, ' +
     history.summary.truncated_transitions + ' truncated transition reports. ' +
     transitions.length + ' transitions match the filter. ' +
-    'Filename ascending order is used; the files are NOT reverified.';
+    'Filename ascending order is used; comparison mode: ' +
+    (fixedBaseline ? 'first baseline' : 'adjacent') +
+    '. Saved claims are NOT reverified.';
   const fragment = document.createDocumentFragment();
   if (!transitions.length) {
     const row = document.createElement('tr');
@@ -1537,6 +1552,10 @@ evidenceHistoryFiles.addEventListener('change', () => {
   invalidateEvidenceHistory();
   historyMessage('Selected evidence files changed. Analyze the timeline again.');
 });
+evidenceHistoryMode.addEventListener('change', () => {
+  invalidateEvidenceHistory();
+  historyMessage('Comparison mode changed. Analyze the selected evidence again.');
+});
 evidenceHistoryFilter.addEventListener('change', renderEvidenceHistory);
 evidenceHistoryRunButton.addEventListener('click', async () => {
   invalidateEvidenceHistory();
@@ -1552,6 +1571,7 @@ evidenceHistoryRunButton.addEventListener('click', async () => {
   }
   // Codepoint sort is deliberate and deterministic, independent of OS
   // locale and browser file-picker selection order.
+  const mode = evidenceHistoryMode.value;
   selected.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   if (selected.some((file, i) => i > 0 && file.name === selected[i - 1].name)) {
     historyMessage('Duplicate filenames cannot establish a reliable timeline. Rename files first.', true);
@@ -1566,7 +1586,7 @@ evidenceHistoryRunButton.addEventListener('click', async () => {
       if (request !== evidenceHistoryGeneration) return;
       archives.push({ name: file.name, text: content });
     }
-    const history = buildEvidenceHistory(archives);
+    const history = buildEvidenceHistory(archives, { mode });
     if (request !== evidenceHistoryGeneration) return;
     latestEvidenceHistory = history;
     latestEvidenceHistoryFiles = selected;
@@ -1574,7 +1594,9 @@ evidenceHistoryRunButton.addEventListener('click', async () => {
     evidenceHistoryCopyButton.disabled = false;
     evidenceHistoryJsonButton.disabled = false;
     evidenceHistoryCsvButton.disabled = false;
-    historyMessage('Archived evidence timeline built. No patches executed and no editors modified.');
+    historyMessage('Archived evidence ' +
+      (mode === 'baseline' ? 'first-baseline analysis' : 'adjacent timeline') +
+      ' built. No patches executed and no editors modified.');
   } catch (error) {
     if (request === evidenceHistoryGeneration) {
       historyMessage('Could not build evidence timeline: ' +

@@ -220,16 +220,21 @@
       </section>
       <section class="evidence-history-workspace" aria-labelledby="evidence-history-heading">
         <h3 id="evidence-history-heading">Review saved evidence history</h3>
-        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Each consecutive pair is compared as archived claims only; use Inspect transition to open its full recorded path-level differences, with filters and local exports. Different failure cases are explicitly flagged. No patch is executed.</p>
+        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Compare consecutive archives or every later file against the first baseline; use Inspect comparison to open full recorded differences with filters and local exports. Different failure cases are flagged. No patch is executed.</p>
         <div class="evidence-history-inputs">
           <label for="evidence-history-files">Saved evidence files</label>
           <input id="evidence-history-files" type="file" multiple accept=".json,application/json">
+          <label for="evidence-history-mode">Comparison</label>
+          <select id="evidence-history-mode">
+            <option value="adjacent">Consecutive archives</option>
+            <option value="baseline">Every archive vs first baseline</option>
+          </select>
           <button class="button subtle" id="run-evidence-history" type="button">Analyze evidence history</button>
         </div>
         <p class="status" id="evidence-history-status" role="status" aria-live="polite">Select 2–10 saved verification evidence files.</p>
         <div id="evidence-history-results" hidden>
           <div class="section-heading">
-            <h4>Consecutive evidence transitions</h4>
+            <h4 id="evidence-history-table-title">Consecutive evidence transitions</h4>
             <div class="result-actions">
               <button class="button subtle" id="copy-evidence-history" type="button" disabled>Copy history</button>
               <button class="button subtle" id="download-evidence-history-json" type="button" disabled>↓ History JSON</button>
@@ -252,7 +257,7 @@
           </div>
           <div class="results-scroll">
             <table class="diff-table">
-              <thead><tr><th scope="col">Baseline file</th><th scope="col">Candidate file</th><th scope="col">Classification</th><th scope="col">Reported status</th><th scope="col">Failure identity</th><th scope="col">Changes</th><th scope="col">Inspect</th></tr></thead>
+              <thead><tr><th scope="col">Baseline file</th><th scope="col">Candidate file</th><th scope="col">Classification</th><th scope="col">Reported status</th><th scope="col">Failure identity</th><th scope="col">Changes</th><th scope="col">Inspect comparison</th></tr></thead>
               <tbody id="evidence-history-rows"></tbody>
             </table>
           </div>
@@ -265,7 +270,7 @@
                 <button class="button subtle" id="download-evidence-history-detail-csv" type="button" disabled>↓ Detail CSV</button>
               </div>
             </div>
-            <p class="hint">This shows recorded differences between two adjacent saved evidence files. A displayed transition is not a fresh replay, independent authentication, or proof of a regression.</p>
+            <p class="hint">This shows the selected saved-evidence pair, using the analysis mode (consecutive or first baseline). It is not a fresh replay, independent authentication, or proof of a regression.</p>
             <p class="evidence-history-detail-summary" id="evidence-history-detail-summary" role="status" aria-live="polite"></p>
             <div class="evidence-history-detail-filters" role="group" aria-label="Filter selected transition detail">
               <label for="evidence-history-detail-path">Report path contains</label>

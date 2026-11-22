@@ -1,6 +1,7 @@
 /**
  * Offline timeline of 2-10 saved verification evidence archives.
  * Files must be passed in explicit chronological order by their filename.
+ * Supports consecutive-pair or fixed-first-baseline comparisons.
  * No patches are executed and no archived verdict is reverified.
  */
 import { compareVerificationArchives } from './evidence-compare.js';
@@ -24,7 +25,10 @@ function validateArchive(item) {
   safeName(item.name);
   return parseVerificationEvidence(item.text);
 }
-export function buildEvidenceHistory(archives) {
+export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
+  if (mode !== 'adjacent' && mode !== 'baseline') {
+    throw new TypeError('History mode must be adjacent or baseline.');
+  }
   if (!Array.isArray(archives) ||
       archives.length < 2 || archives.length > MAX_ARCHIVES) {
     throw new RangeError('Select 2–10 saved evidence files.');
@@ -52,15 +56,16 @@ export function buildEvidenceHistory(archives) {
   let differentCases = 0;
   let truncatedTransitions = 0;
   for (let i = 1; i < archives.length; i++) {
+    const fromIndex = mode === 'baseline' ? 0 : i - 1;
     const comparison = compareVerificationArchives(
-      archives[i - 1].text, archives[i].text);
+      archives[fromIndex].text, archives[i].text);
     const assessment = comparison.assessment;
     if (!assessment.sameCase) differentCases++;
     if (assessment.truncated) truncatedTransitions++;
     const name = assessment.classification;
     classifications[name] = (classifications[name] || 0) + 1;
     transitions.push({
-      from_file: archives[i - 1].name,
+      from_file: archives[fromIndex].name,
       to_file: archives[i].name,
       from_reproduced_claim: comparison.baselineReproduced,
       to_reproduced_claim: comparison.candidateReproduced,
@@ -77,7 +82,11 @@ export function buildEvidenceHistory(archives) {
     version: 1,
     archived_not_reverified: true,
     ordering: 'filename-ascending',
+    comparison_mode: mode,
+    baseline_file: archives[0].name,
     summary: {
+      comparison_mode: mode,
+      baseline_file: archives[0].name,
       archives: archives.length,
       transitions: transitions.length,
       reproduced_claims: snapshots.filter(x => x.reproduced_claim).length,
@@ -100,14 +109,16 @@ export function serializeEvidenceHistoryCsv(history) {
     'from_file','to_file','from_reproduced','to_reproduced',
     'same_failure_identity','classification','recorded_differences',
     'report_truncated','metadata_changes','finding_changes',
-    'checkpoint_changes','other_changes','archived_not_reverified'
+    'checkpoint_changes','other_changes','archived_not_reverified',
+    'comparison_mode'
   ]];
   for (const t of history.transitions) {
     lines.push([
       t.from_file,t.to_file,t.from_reproduced_claim,t.to_reproduced_claim,
       t.same_failure_identity,t.classification,t.differences,t.truncated,
       t.changed_areas.metadata,t.changed_areas.findings,
-      t.changed_areas.checkpoint,t.changed_areas.other,'true'
+      t.changed_areas.checkpoint,t.changed_areas.other,'true',
+      history.comparison_mode
     ]);
   }
   return '\uFEFF' + lines.map(cells => cells.map(csvCell).join(',')).join('\r\n') + '\r\n';
