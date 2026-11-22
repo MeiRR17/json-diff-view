@@ -57,7 +57,7 @@ export function serializeReportCsv(report, { source = 'Before → After' } = {})
  * Counts reflect *recorded* changes only; a truncated comparison is labeled
  * as incomplete rather than presented as an exhaustive difference count.
  */
-export function serializeReportCountsJson(report) {
+function reportCountsSummary(report) {
   const keys = ['added', 'removed', 'changed'];
   if (!report || typeof report !== 'object' ||
       !Array.isArray(report.changes) || report.changes.length > 5000 ||
@@ -71,7 +71,7 @@ export function serializeReportCountsJson(report) {
   if (total !== report.changes.length) {
     throw new TypeError('JSON difference totals do not match the recorded changes.');
   }
-  return JSON.stringify({
+  return {
     format: 'json-diff-view-counts-v1',
     complete: !report.truncated,
     recordedChanges: total,
@@ -79,5 +79,34 @@ export function serializeReportCountsJson(report) {
     advisory: report.truncated
       ? 'Comparison was truncated. Counts represent only recorded changes and are lower bounds, not complete totals.'
       : 'Counts only; no source values, JSON paths, or patch operations. Aggregates can still reveal sensitive activity.',
-  }, null, 2) + '\n';
+  };
+}
+
+
+/** Export the same validated counts-only summary as a JSON document. */
+export function serializeReportCountsJson(report) {
+  return JSON.stringify(reportCountsSummary(report), null, 2) + '\n';
+}
+
+/**
+ * Single-row, values-only CSV for aggregate comparisons in spreadsheets.
+ * No JSON paths, values, patch instructions, labels from source documents or
+ * user-controlled strings enter the file. Complete=false means the recorded
+ * counts are merely lower bounds.
+ */
+export function serializeReportCountsCsv(report) {
+  const summary = reportCountsSummary(report);
+  const header = [
+    'format', 'complete', 'recorded_changes', 'added', 'removed', 'changed',
+  ];
+  const row = [
+    summary.format, String(summary.complete), String(summary.recordedChanges),
+    String(summary.counts.added), String(summary.counts.removed),
+    String(summary.counts.changed),
+  ];
+  // All output fields are internally controlled tokens, booleans or integers.
+  // Quote them anyway for stable RFC 4180 spreadsheet import behavior.
+  return '\uFEFF' + [header, row].map(cells =>
+    cells.map(cell => '"' + cell.replaceAll('"', '""') + '"').join(',')
+  ).join('\r\n') + '\r\n';
 }

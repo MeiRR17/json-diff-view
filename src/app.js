@@ -1,7 +1,7 @@
 import { diffJson, parseJson } from './diff.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
 import { applyJsonPatch, applyJsonPatchPrefix, JsonPatchOperationError } from './apply.js';
-import { serializeReportJson, serializeReportCsv, serializeReportCountsJson } from './export.js';
+import { serializeReportJson, serializeReportCsv, serializeReportCountsJson, serializeReportCountsCsv } from './export.js';
 import { inspectPatchOperations } from './inspect.js';
 import { comparePatchRange } from './range.js';
 import { serializeCheckpointBundle, parseCheckpointBundle } from './bundle.js';
@@ -153,6 +153,7 @@ const copyButton = document.querySelector('#copy');
 const downloadReportJsonButton = document.querySelector('#download-report-json');
 const downloadReportCsvButton = document.querySelector('#download-report-csv');
 const downloadReportCountsButton = document.querySelector('#download-report-counts');
+const downloadReportCountsCsvButton = document.querySelector('#download-report-counts-csv');
 const copyPatchButton = document.querySelector('#copy-patch');
 const downloadPatchButton = document.querySelector('#download-patch');
 const guardPatchCheckbox = document.querySelector('#guard-patch');
@@ -4639,6 +4640,7 @@ function resetReport() {
   downloadReportJsonButton.disabled = true;
   downloadReportCsvButton.disabled = true;
   downloadReportCountsButton.disabled = true;
+  downloadReportCountsCsvButton.disabled = true;
   copyPatchButton.disabled = downloadPatchButton.disabled = true;
   summary.hidden = true;
   summary.replaceChildren();
@@ -4705,6 +4707,7 @@ function compare() {
     downloadReportJsonButton.disabled = false;
     downloadReportCsvButton.disabled = false;
     downloadReportCountsButton.disabled = false;
+    downloadReportCountsCsvButton.disabled = false;
 
     latestComparison = { before: left, after: right };
     const patchStatus = refreshGeneratedPatch();
@@ -4881,6 +4884,18 @@ function exportComparison(format) {
 }
 downloadReportJsonButton.addEventListener('click', () => exportComparison('json'));
 downloadReportCsvButton.addEventListener('click', () => exportComparison('csv'));
+downloadReportCountsCsvButton.addEventListener('click', () => {
+  if (!latestReport || downloadReportCountsCsvButton.disabled) return;
+  try {
+    downloadReport(serializeReportCountsCsv(latestReport),
+      'json-differences-counts.csv', 'text/csv;charset=utf-8');
+    setStatus('Counts-only CSV exported with no JSON paths or values.' +
+      (latestReport.truncated ? ' Recorded counts are incomplete lower bounds.' : ''));
+  } catch (error) {
+    setStatus('Counts CSV export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
 downloadReportCountsButton.addEventListener('click', () => {
   if (!latestReport) return;
   try {
