@@ -25,6 +25,7 @@ const workspaceSaveButton = document.querySelector('#download-workspace');
 const workspaceOpenButton = document.querySelector('#import-workspace');
 const workspaceFile = document.querySelector('#workspace-file');
 const workspaceStatus = document.querySelector('#workspace-status');
+const workspaceUndoButton = document.querySelector('#undo-workspace-restore');
 const workspacePreview = document.querySelector('#workspace-preview');
 const workspacePreviewSummary = document.querySelector('#workspace-preview-summary');
 const workspacePreviewRows = document.querySelector('#workspace-preview-rows');
@@ -272,6 +273,7 @@ let patchImportSequence = 0;
 let bundleImportSequence = 0;
 let workspaceImportSequence = 0;
 let stagedWorkspace = null;
+let latestWorkspaceUndo = null;
 let latestInspection = null;
 let inspectionPage = 0;
 let latestStep = null;
@@ -327,6 +329,34 @@ function workspaceChanged(a, b) {
 function workspaceMessage(message, error = false) {
   workspaceStatus.textContent = message;
   workspaceStatus.classList.toggle('error', error);
+}
+/**
+ * A single, memory-only undo checkpoint. The object holds only properties
+ * actually modified by the last confirmed restore. Never undo unrelated
+ * fields or write over changes made after the restore.
+ */
+function clearWorkspaceUndo() {
+  latestWorkspaceUndo = null;
+  workspaceUndoButton.disabled = true;
+  workspaceUndoButton.title = 'Available after a workspace restore changes editor content or settings.';
+}
+function invalidateWorkspaceUndoOnEdit(key) {
+  if (!latestWorkspaceUndo || !latestWorkspaceUndo.keys.includes(key)) return;
+  clearWorkspaceUndo();
+  workspaceMessage('Undo restore is no longer available: a restored field was edited. ' +
+    'Your newer work is preserved.');
+}
+function currentWorkspaceUndo() {
+  const undo = latestWorkspaceUndo;
+  if (!undo) return null;
+  const current = currentWorkspaceValues();
+  if (undo.keys.some(key => current[key] !== undo.after[key])) {
+    clearWorkspaceUndo();
+    workspaceMessage('Undo restore was canceled: restored fields changed since ' +
+      'the restore. No work was overwritten.', true);
+    return null;
+  }
+  return undo;
 }
 function clearWorkspaceStaging() {
   stagedWorkspace = null;
@@ -409,15 +439,26 @@ for (const section of workspaceSections) {
 }
 // Editing an editor or setting invalidates a staged import. It also cancels
 // an in-flight file read, including edit-and-revert sequences.
-for (const field of [beforeEditor, afterEditor, patchSource,
-  rangeStartInput, rangeEndInput, stepCountInput]) {
-  field.addEventListener('input', () => discardWorkspaceStaging(
-    'Workspace preview canceled because the current work changed. Open the file again.'));
+for (const [field, key] of [
+  [beforeEditor, 'beforeText'], [afterEditor, 'afterText'],
+  [patchSource, 'patchText'], [rangeStartInput, 'rangeStart'],
+  [rangeEndInput, 'rangeEnd'], [stepCountInput, 'stepCount']
+]) {
+  field.addEventListener('input', () => {
+    discardWorkspaceStaging(
+      'Workspace preview canceled because the current work changed. Open the file again.');
+    invalidateWorkspaceUndoOnEdit(key);
+  });
 }
-for (const control of [patchBase, patchDirection, guardPatchCheckbox,
-  guardRangePatchCheckbox]) {
-  control.addEventListener('change', () => discardWorkspaceStaging(
-    'Workspace preview canceled because the current work changed. Open the file again.'));
+for (const [control, key] of [
+  [patchBase, 'patchBase'], [patchDirection, 'patchDirection'],
+  [guardPatchCheckbox, 'guardPatch'], [guardRangePatchCheckbox, 'guardRangePatch']
+]) {
+  control.addEventListener('change', () => {
+    discardWorkspaceStaging(
+      'Workspace preview canceled because the current work changed. Open the file again.');
+    invalidateWorkspaceUndoOnEdit(key);
+  });
 }
 workspaceSaveButton.addEventListener('click', () => {
   try {
@@ -505,6 +546,16 @@ workspaceApplyButton.addEventListener('click', () => {
     discardWorkspaceStaging('Current values changed before restore. Open the file again.');
     return;
   }
+  // Capture exact changed keys before replacing editor values. Unchecked
+  // sections and identical fields must never be part of undo.
+  const changedKeys = changes.flatMap(section =>
+    section.keys.filter(key => staged.snapshot[key] !== staged.values[key]));
+  const undo = {
+    before: Object.fromEntries(changedKeys.map(key => [key, staged.snapshot[key]])),
+    after: Object.fromEntries(changedKeys.map(key => [key, staged.values[key]])),
+    keys: changedKeys,
+    sections: changes.map(section => section.name)
+  };
   // Commit selected replacements as one user-approved action. Cancel any
   // outstanding asynchronous editor/patch/bundle imports first.
   discardWorkspaceStaging();
@@ -530,8 +581,47 @@ workspaceApplyButton.addEventListener('click', () => {
   updateResultTarget();
   setStatus('Selected workspace sections restored. Compare JSON to refresh the report.');
   patchMessage('Prior patch preview cleared. Run Preview applying patch explicitly.');
+  latestWorkspaceUndo = undo;
+  workspaceUndoButton.disabled = false;
+  workspaceUndoButton.title = 'Revert the last restored fields only; unrelated edits are preserved.';
   workspaceMessage('Selected workspace sections restored. Other sections were preserved. ' +
+    'Undo restore is available until any restored field changes. ' +
     'No JSON was parsed and no patch was executed.');
+});
+workspaceUndoButton.addEventListener('click', () => {
+  const undo = currentWorkspaceUndo();
+  if (!undo) return;
+  if (!confirm('Undo the last workspace restore for ' +
+      undo.sections.join(', ') + '? Only the fields changed by that restore ' +
+      'will be reverted. Other fields stay unchanged. No patch will run.')) return;
+  // A programmatic editor update or import may not emit an input event.
+  if (!currentWorkspaceUndo()) return;
+  // Abort any outstanding async file imports, including an in-flight
+  // workspace import. This is one explicit, user-confirmed editor action.
+  discardWorkspaceStaging();
+  invalidateAllEditorImports();
+  patchImportSequence++;
+  bundleImportSequence++;
+  const old = undo.before, keys = undo.keys;
+  if (keys.includes('beforeText')) beforeEditor.value = old.beforeText;
+  if (keys.includes('afterText')) afterEditor.value = old.afterText;
+  if (keys.includes('patchText')) patchSource.value = old.patchText;
+  if (keys.includes('patchBase')) patchBase.value = old.patchBase;
+  if (keys.includes('patchDirection')) patchDirection.value = old.patchDirection;
+  if (keys.includes('guardPatch')) guardPatchCheckbox.checked = old.guardPatch;
+  if (keys.includes('guardRangePatch')) guardRangePatchCheckbox.checked = old.guardRangePatch;
+  if (keys.includes('rangeStart')) rangeStartInput.value = old.rangeStart;
+  if (keys.includes('rangeEnd')) rangeEndInput.value = old.rangeEnd;
+  if (keys.includes('stepCount')) stepCountInput.value = old.stepCount;
+  clearWorkspaceUndo();
+  invalidateInspection();
+  resetReport();
+  invalidateImportedFailure('Workspace restore undone. Import a failure bundle to verify one.');
+  updateResultTarget();
+  setStatus('Workspace restore undone. Select Compare JSON to refresh results.');
+  patchMessage('Patch preview cleared after undo. Preview again to execute explicitly.');
+  workspaceMessage('The last workspace restore was undone. Unrelated changes remain; ' +
+    'no JSON was parsed and no patch was executed.');
 });
 
 function fitInput(source, label) {

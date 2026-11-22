@@ -53,8 +53,10 @@
       <div class="workspace-actions" role="group" aria-label="Save or restore all editor drafts">
         <button class="button subtle" type="button" id="download-workspace">↓ Save workspace</button>
         <button class="button subtle" type="button" id="import-workspace">↑ Open workspace</button>
+        <button class="button subtle" type="button" id="undo-workspace-restore" disabled
+          title="Available after a workspace restore changes editor content or settings.">Undo restore</button>
         <input id="workspace-file" type="file" accept=".json,application/json" hidden>
-        <span class="hint">Includes three raw editor drafts and patch/range settings. Opening a workspace previews the changes; you choose which sections to restore.</span>
+        <span class="hint">Includes three raw editor drafts and patch/range settings. Opening a workspace previews the changes; you choose which sections to restore. Undo restore can revert the last confirmed replacement without touching unrelated edits.</span>
       </div>
       <p id="workspace-status" class="hint" role="status" aria-live="polite">Select a saved workspace file to preview and restore chosen sections.</p>
       <section class="workspace-preview" id="workspace-preview" aria-labelledby="workspace-preview-heading" hidden>
