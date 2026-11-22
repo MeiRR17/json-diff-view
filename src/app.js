@@ -188,9 +188,26 @@ const evidenceHistoryFilter = document.querySelector('#evidence-history-filter')
 const evidenceHistoryCopyButton = document.querySelector('#copy-evidence-history');
 const evidenceHistoryJsonButton = document.querySelector('#download-evidence-history-json');
 const evidenceHistoryCsvButton = document.querySelector('#download-evidence-history-csv');
+const evidenceHistoryDetailPanel = document.querySelector('#evidence-history-detail');
+const evidenceHistoryDetailSummary = document.querySelector('#evidence-history-detail-summary');
+const evidenceHistoryDetailRows = document.querySelector('#evidence-history-detail-rows');
+const evidenceHistoryDetailPath = document.querySelector('#evidence-history-detail-path');
+const evidenceHistoryDetailType = document.querySelector('#evidence-history-detail-type');
+const evidenceHistoryDetailScope = document.querySelector('#evidence-history-detail-scope');
+const evidenceHistoryDetailNav = document.querySelector('#evidence-history-detail-nav');
+const evidenceHistoryDetailPrevious = document.querySelector('#evidence-history-detail-previous');
+const evidenceHistoryDetailNext = document.querySelector('#evidence-history-detail-next');
+const evidenceHistoryDetailPageSummary = document.querySelector('#evidence-history-detail-page-summary');
+const evidenceHistoryDetailCopyButton = document.querySelector('#copy-evidence-history-detail');
+const evidenceHistoryDetailJsonButton = document.querySelector('#download-evidence-history-detail-json');
+const evidenceHistoryDetailCsvButton = document.querySelector('#download-evidence-history-detail-csv');
 
 let evidenceHistoryGeneration = 0;
 let latestEvidenceHistory = null;
+let latestEvidenceHistoryFiles = null;
+let historyDetailRequest = 0;
+let latestEvidenceHistoryDetail = null;
+let evidenceHistoryDetailPage = 0;
 let evidenceCompareGeneration = 0;
 let latestEvidenceComparison = null;
 let evidenceComparisonPage = 0;
@@ -1261,9 +1278,206 @@ function historyMessage(message, error = false) {
   evidenceHistoryStatus.textContent = message;
   evidenceHistoryStatus.classList.toggle('error', error);
 }
+// Individual history transitions are inspected only on user request.
+// Saved-file handles are retained for reading selected adjacent pairs, while
+// history JSON/CSV exports remain small, summarized and independent of them.
+function invalidateHistoryDetail() {
+  historyDetailRequest++;
+  latestEvidenceHistoryDetail = null;
+  evidenceHistoryDetailPage = 0;
+  evidenceHistoryDetailPanel.hidden = true;
+  evidenceHistoryDetailSummary.textContent = '';
+  evidenceHistoryDetailRows.replaceChildren();
+  evidenceHistoryDetailPath.value = '';
+  evidenceHistoryDetailType.value = 'all';
+  evidenceHistoryDetailScope.value = 'all';
+  evidenceHistoryDetailNav.hidden = true;
+  evidenceHistoryDetailCopyButton.disabled = true;
+  evidenceHistoryDetailJsonButton.disabled = true;
+  evidenceHistoryDetailCsvButton.disabled = true;
+}
+function currentHistoryDetail() {
+  const entry = latestEvidenceHistoryDetail;
+  if (!entry || entry.history !== latestEvidenceHistory ||
+      entry.files !== latestEvidenceHistoryFiles) {
+    invalidateHistoryDetail();
+    return null;
+  }
+  return entry;
+}
+function renderHistoryDetail() {
+  const entry = latestEvidenceHistoryDetail;
+  if (!entry) return;
+  const { comparison, from, to } = entry;
+  const report = comparison.report;
+  const needle = evidenceHistoryDetailPath.value.trim().toLocaleLowerCase();
+  const type = evidenceHistoryDetailType.value;
+  const scope = evidenceHistoryDetailScope.value;
+  const matches = report.changes.filter(change =>
+    (type === 'all' || change.type === type) &&
+    (scope === 'all' || evidenceChangeScope(change.path) === scope) &&
+    (!needle || change.path.toLocaleLowerCase().includes(needle))
+  );
+  const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
+  evidenceHistoryDetailPage = Math.min(evidenceHistoryDetailPage, pages - 1);
+  const start = evidenceHistoryDetailPage * PAGE_SIZE;
+  const rows = matches.slice(start, start + PAGE_SIZE);
+  evidenceHistoryDetailPanel.hidden = false;
+  evidenceHistoryDetailSummary.textContent =
+    'SAVED EVIDENCE — NOT REVERIFIED. ' + from + ' → ' + to +
+    '. ' + comparison.assessment.classification.replaceAll('-', ' ') +
+    '. ' + comparison.assessment.headline + ' ' +
+    matches.length + ' of ' + report.changes.length +
+    ' recorded differences match the filters.' +
+    (report.truncated ? ' Comparison truncated at 5,000 changes.' : '');
+  evidenceHistoryDetailNav.hidden = matches.length <= PAGE_SIZE;
+  evidenceHistoryDetailPrevious.disabled = evidenceHistoryDetailPage === 0;
+  evidenceHistoryDetailNext.disabled = evidenceHistoryDetailPage >= pages - 1;
+  evidenceHistoryDetailPageSummary.textContent =
+    'Page ' + (evidenceHistoryDetailPage + 1) + ' of ' + pages;
+
+  const fragment = document.createDocumentFragment();
+  if (!rows.length) {
+    const row = document.createElement('tr');
+    const value = cell('td', report.changes.length ?
+      'No transition differences match these filters.' :
+      'No recorded differences between these two archived findings.', 'empty');
+    value.colSpan = 3;
+    row.append(value);
+    fragment.append(row);
+  } else for (const change of rows) {
+    const row = document.createElement('tr');
+    row.className = change.type;
+    const pathCell = document.createElement('td');
+    pathCell.append(cell('span', change.type, 'tag'));
+    pathCell.append(document.createElement('br'));
+    pathCell.append(cell('span', change.path, 'path'));
+    const left = document.createElement('td');
+    left.append(cell('pre', displayValue(change.before, change.type !== 'added')));
+    const right = document.createElement('td');
+    right.append(cell('pre', displayValue(change.after, change.type !== 'removed')));
+    row.append(pathCell, left, right);
+    fragment.append(row);
+  }
+  evidenceHistoryDetailRows.replaceChildren(fragment);
+}
+async function openHistoryTransition(index) {
+  const history = latestEvidenceHistory;
+  const files = latestEvidenceHistoryFiles;
+  if (!history || !files || !Number.isSafeInteger(index) ||
+      index < 0 || index >= history.transitions.length) return;
+  invalidateHistoryDetail();
+  const request = historyDetailRequest;
+  const generation = evidenceHistoryGeneration;
+  const valid = () => request === historyDetailRequest &&
+    generation === evidenceHistoryGeneration &&
+    history === latestEvidenceHistory && files === latestEvidenceHistoryFiles;
+  const from = files[index], to = files[index + 1];
+  historyMessage('Reading selected adjacent evidence files locally…');
+  try {
+    const [beforeText, afterText] = await Promise.all([from.text(), to.text()]);
+    if (!valid()) return;
+    const comparison = compareVerificationArchives(beforeText, afterText);
+    if (!valid()) return;
+    latestEvidenceHistoryDetail = {
+      history, files, index, from: from.name, to: to.name, comparison
+    };
+    evidenceHistoryDetailCopyButton.disabled = false;
+    evidenceHistoryDetailJsonButton.disabled = false;
+    evidenceHistoryDetailCsvButton.disabled = false;
+    renderHistoryDetail();
+    historyMessage('Opened the selected saved-evidence transition. No patch was replayed.');
+    evidenceHistoryDetailPanel.scrollIntoView({ block: 'nearest' });
+  } catch (error) {
+    if (valid()) historyMessage('Could not inspect this history transition: ' +
+      (error instanceof Error ? error.message : 'invalid evidence'), true);
+  }
+}
+function historyDetailJson(entry) {
+  return JSON.stringify({
+    format: 'json-diff-view-history-transition-detail',
+    version: 1,
+    archived_not_reverified: true,
+    history_pair_index: entry.index + 1,
+    from_file: entry.from,
+    to_file: entry.to,
+    same_failure_identity: entry.comparison.sameCase,
+    baseline: {
+      metadata: entry.comparison.baseline,
+      reproduced_claim: entry.comparison.baselineReproduced
+    },
+    candidate: {
+      metadata: entry.comparison.candidate,
+      reproduced_claim: entry.comparison.candidateReproduced
+    },
+    drift_assessment: entry.comparison.assessment,
+    report: entry.comparison.report
+  }, null, 2) + '\n';
+}
+for (const control of [evidenceHistoryDetailPath, evidenceHistoryDetailType,
+  evidenceHistoryDetailScope]) {
+  control.addEventListener(control === evidenceHistoryDetailPath ? 'input' : 'change',
+    () => {
+      if (!currentHistoryDetail()) return;
+      evidenceHistoryDetailPage = 0;
+      renderHistoryDetail();
+    });
+}
+evidenceHistoryDetailPrevious.addEventListener('click', () => {
+  if (!currentHistoryDetail() || evidenceHistoryDetailPage === 0) return;
+  evidenceHistoryDetailPage--;
+  renderHistoryDetail();
+});
+evidenceHistoryDetailNext.addEventListener('click', () => {
+  if (!currentHistoryDetail()) return;
+  evidenceHistoryDetailPage++;
+  renderHistoryDetail();
+});
+evidenceHistoryDetailCopyButton.addEventListener('click', async () => {
+  const entry = currentHistoryDetail();
+  if (!entry) return;
+  try {
+    const content = historyDetailJson(entry);
+    if (new TextEncoder().encode(content).byteLength > MAX_REPORT_EXPORT_BYTES) {
+      throw new RangeError('Transition detail exceeds the 8 MiB export limit.');
+    }
+    await navigator.clipboard.writeText(content);
+    historyMessage('Full transition detail copied; UI filters did not affect the export.');
+  } catch (error) {
+    historyMessage('Cannot copy transition detail: ' +
+      (error instanceof Error ? error.message : 'clipboard unavailable'), true);
+  }
+});
+function exportHistoryDetail(format) {
+  const entry = currentHistoryDetail();
+  if (!entry) return;
+  try {
+    const csv = format === 'csv';
+    const text = csv ? serializeReportCsv(entry.comparison.report, {
+      source: 'Archived history pair ' + (entry.index + 1) +
+        ' (not reverified; ' + entry.comparison.assessment.classification + ')'
+    }) : historyDetailJson(entry);
+    downloadReport(text,
+      'evidence-history-transition-' + (entry.index + 1) + '.' + format,
+      csv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8');
+    historyMessage('Full history transition downloaded as ' +
+      format.toUpperCase() + (entry.comparison.report.truncated ?
+        ' (truncated).' : '.'));
+  } catch (error) {
+    historyMessage('Transition export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+}
+evidenceHistoryDetailJsonButton.addEventListener('click',
+  () => exportHistoryDetail('json'));
+evidenceHistoryDetailCsvButton.addEventListener('click',
+  () => exportHistoryDetail('csv'));
+
 function invalidateEvidenceHistory() {
+  invalidateHistoryDetail();
   evidenceHistoryGeneration++;
   latestEvidenceHistory = null;
+  latestEvidenceHistoryFiles = null;
   evidenceHistoryPanel.hidden = true;
   evidenceHistoryRows.replaceChildren();
   evidenceHistorySummary.textContent = '';
@@ -1293,7 +1507,7 @@ function renderEvidenceHistory() {
   if (!transitions.length) {
     const row = document.createElement('tr');
     const empty = cell('td', 'No transitions match this classification filter.', 'empty');
-    empty.colSpan = 6;
+    empty.colSpan = 7;
     row.append(empty);
     fragment.append(row);
   } else for (const item of transitions) {
@@ -1305,6 +1519,16 @@ function renderEvidenceHistory() {
       item.same_failure_identity ? 'same case' : 'different case',
       String(item.differences) + (item.truncated ? ' (truncated)' : '')
     ]) row.append(cell('td', value));
+    const inspectCell = document.createElement('td');
+    const index = history.transitions.indexOf(item);
+    const inspect = document.createElement('button');
+    inspect.type = 'button';
+    inspect.className = 'button subtle';
+    inspect.textContent = 'Inspect transition';
+    inspect.setAttribute('aria-label', 'Inspect archived transition ' + (index + 1));
+    inspect.addEventListener('click', () => { void openHistoryTransition(index); });
+    inspectCell.append(inspect);
+    row.append(inspectCell);
     fragment.append(row);
   }
   evidenceHistoryRows.replaceChildren(fragment);
@@ -1345,6 +1569,7 @@ evidenceHistoryRunButton.addEventListener('click', async () => {
     const history = buildEvidenceHistory(archives);
     if (request !== evidenceHistoryGeneration) return;
     latestEvidenceHistory = history;
+    latestEvidenceHistoryFiles = selected;
     renderEvidenceHistory();
     evidenceHistoryCopyButton.disabled = false;
     evidenceHistoryJsonButton.disabled = false;

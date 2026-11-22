@@ -315,3 +315,18 @@ a{color:#155a98}
 #evidence-history-rows td{overflow-wrap:anywhere}
 @media(max-width:700px){.evidence-history-workspace .result-actions{width:100%;justify-content:flex-start}.evidence-history-inputs label{width:100%}.evidence-history-inputs .button{flex:1 1 160px}}
 @media(prefers-color-scheme:dark){.evidence-history-workspace{border-color:#3b5068}.evidence-history-inputs label,.evidence-history-filter label,#evidence-history-summary{color:#b6cce3}.evidence-history-filter select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Drill down into a single adjacent pair of saved evidence files. */
+.evidence-history-detail{border-top:1px solid #d8e1ed;margin:18px 0 0;padding:18px 0 0}
+.evidence-history-detail .section-heading{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.evidence-history-detail .hint{overflow-wrap:anywhere}
+.evidence-history-detail-summary{font-size:.86rem;font-weight:650;color:#3d5471;margin:12px 0;overflow-wrap:anywhere}
+.evidence-history-detail-filters{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:13px 0}
+.evidence-history-detail-filters label{font-size:.84rem;font-weight:650;color:#3d5471}
+.evidence-history-detail-filters input,.evidence-history-detail-filters select{font:inherit;min-height:38px;padding:8px 10px;max-width:100%;color:#18324d;background:#fff;border:1px solid #bdcde0;border-radius:8px}
+.evidence-history-detail-filters input{flex:2 1 170px}
+.evidence-history-detail-filters select{flex:0 1 170px}
+.evidence-history-detail-filters input:focus-visible,.evidence-history-detail-filters select:focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+#evidence-history-rows td .button{white-space:nowrap;max-width:100%;font-size:.8rem}
+@media(max-width:700px){.evidence-history-detail .result-actions{width:100%;justify-content:flex-start}.evidence-history-detail-filters label{width:100%}.evidence-history-detail-filters select{flex:1 1 170px}}
+@media(prefers-color-scheme:dark){.evidence-history-detail{border-color:#3b5068}.evidence-history-detail-summary,.evidence-history-detail-filters label{color:#b6cce3}.evidence-history-detail-filters input,.evidence-history-detail-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
