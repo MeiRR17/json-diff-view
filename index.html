@@ -142,6 +142,38 @@
                 <tbody id="snapshot-compare-rows"></tbody>
               </table>
             </div>
+            <section class="snapshot-hunk-on-demand" aria-labelledby="snapshot-hunk-inspect-heading">
+              <h4 id="snapshot-hunk-inspect-heading">Inspect any change hunk</h4>
+              <p class="hint">Open a numbered hunk beyond the initial 48 summaries or 180 displayed rows. The selected editor is realigned locally only when you request it. No editor will be modified.</p>
+              <div class="snapshot-hunk-on-demand-controls">
+                <label for="snapshot-hunk-editor">Editor</label>
+                <select id="snapshot-hunk-editor">
+                  <option value="before">Before editor</option>
+                  <option value="after">After editor</option>
+                  <option value="patch">JSON Patch editor</option>
+                </select>
+                <label for="snapshot-hunk-index">Hunk number</label>
+                <input id="snapshot-hunk-index" type="number" min="1" max="1" step="1" value="1">
+                <button class="button subtle" type="button" id="snapshot-hunk-open" disabled>Inspect hunk</button>
+              </div>
+              <div id="snapshot-hunk-inspection" hidden>
+                <div class="section-heading">
+                  <h4>Selected hunk inspection</h4>
+                  <div class="result-actions">
+                    <button class="button subtle" type="button" id="snapshot-hunk-download-json" disabled>↓ Hunk JSON</button>
+                    <button class="button subtle" type="button" id="snapshot-hunk-download-csv" disabled>↓ Hunk CSV</button>
+                  </div>
+                </div>
+                <p id="snapshot-hunk-inspection-summary" role="status" aria-live="polite"></p>
+                <div class="results-scroll">
+                  <table class="diff-table">
+                    <thead><tr><th scope="col">Type</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
+                    <tbody id="snapshot-hunk-inspection-rows"></tbody>
+                  </table>
+                </div>
+                <p class="hint">At most 180 changed rows and 240 characters per line are retained. Exported metadata counts the complete requested hunk even if its preview is truncated; the source drafts are not embedded.</p>
+              </div>
+            </section>
             <p class="hint">Changes are grouped into hunks separated by unchanged aligned lines; the selector opens any hunk with retained preview rows. Up to 48 initial hunk summaries and 180 changed-line previews per editor, with 240 characters per line, are recorded. Smaller changed regions use LCS alignment (up to 1,000 lines per side and 400,000 matrix cells); larger regions use a clearly marked positional fallback. Exports contain preview rows and strategy metadata, not complete editor drafts. Line snippets may be sensitive.</p>
           </div>
           <section class="snapshot-semantic-results" id="snapshot-semantic-results" aria-labelledby="snapshot-semantic-heading" hidden>

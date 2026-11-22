@@ -519,3 +519,18 @@ a{color:#155a98}
 #snapshot-compare-hunk:disabled{opacity:.6}
 #snapshot-compare-hunk-summary{font-size:.83rem;overflow-wrap:anywhere}
 @media(prefers-color-scheme:dark){#snapshot-compare-hunk{background:#19293b;color:#e3f1ff;border-color:#536783}}
+
+/* Explicit, bounded inspection of hunks beyond the initial preview window. */
+.snapshot-hunk-on-demand{border-top:1px solid #d8e1ed;padding:16px 0;margin:18px 0}
+.snapshot-hunk-on-demand h4{font-size:.94rem;margin:0 0 8px}
+.snapshot-hunk-on-demand .hint{overflow-wrap:anywhere}
+.snapshot-hunk-on-demand-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}
+.snapshot-hunk-on-demand-controls label{font-size:.83rem;font-weight:650;color:#3d5471}
+.snapshot-hunk-on-demand-controls select,.snapshot-hunk-on-demand-controls input{font:inherit;min-height:38px;padding:8px 10px;border:1px solid #bdcde0;border-radius:8px;background:#fff;color:#18324d;max-width:100%;min-width:0}
+.snapshot-hunk-on-demand-controls select{flex:1 1 145px}
+.snapshot-hunk-on-demand-controls input{flex:0 1 115px}
+.snapshot-hunk-on-demand-controls :is(select,input):focus-visible{outline:3px solid #44a7e9;outline-offset:2px}
+#snapshot-hunk-inspection-summary{font-size:.85rem;font-weight:650;overflow-wrap:anywhere}
+.snapshot-hunk-on-demand td{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:700px){.snapshot-hunk-on-demand-controls label{flex:1 1 100%}.snapshot-hunk-on-demand-controls .button{flex:1 1 100%}}
+@media(prefers-color-scheme:dark){.snapshot-hunk-on-demand{border-color:#3b5068}.snapshot-hunk-on-demand-controls label{color:#b6cce3}.snapshot-hunk-on-demand-controls select,.snapshot-hunk-on-demand-controls input{background:#19293b;color:#e3f1ff;border-color:#536783}}

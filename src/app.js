@@ -12,6 +12,9 @@ import {
   serializeSnapshotComparisonCsv
 } from './snapshot-compare.js';
 import {
+  inspectSnapshotHunk, serializeHunkInspectionJson, serializeHunkInspectionCsv
+} from './hunk-inspect.js';
+import {
   compareSnapshotJsonStructures, serializeSnapshotStructuralJson,
   serializeSnapshotStructuralCsv
 } from './snapshot-semantic.js';
@@ -59,6 +62,14 @@ const snapshotCompareArea = document.querySelector('#snapshot-compare-area');
 const snapshotCompareChangeKind = document.querySelector('#snapshot-compare-change-kind');
 const snapshotCompareHunk = document.querySelector('#snapshot-compare-hunk');
 const snapshotCompareHunkSummary = document.querySelector('#snapshot-compare-hunk-summary');
+const snapshotHunkEditor = document.querySelector('#snapshot-hunk-editor');
+const snapshotHunkIndex = document.querySelector('#snapshot-hunk-index');
+const snapshotHunkOpen = document.querySelector('#snapshot-hunk-open');
+const snapshotHunkInspection = document.querySelector('#snapshot-hunk-inspection');
+const snapshotHunkInspectionSummary = document.querySelector('#snapshot-hunk-inspection-summary');
+const snapshotHunkInspectionRows = document.querySelector('#snapshot-hunk-inspection-rows');
+const snapshotHunkDownloadJson = document.querySelector('#snapshot-hunk-download-json');
+const snapshotHunkDownloadCsv = document.querySelector('#snapshot-hunk-download-csv');
 const snapshotCompareRows = document.querySelector('#snapshot-compare-rows');
 const snapshotCompareJson = document.querySelector('#snapshot-compare-json');
 const snapshotCompareCsv = document.querySelector('#snapshot-compare-csv');
@@ -341,6 +352,7 @@ let stagedCollection = null;
 let stagedWorkspace = null;
 let latestWorkspaceUndo = null;
 let latestSnapshotComparison = null;
+let latestHunkInspection = null;
 let latestSnapshotStructuralComparison = null;
 // Reserved comparison-only ID: snapshot IDs are numeric strings.
 const CURRENT_WORKSPACE_ENTRY_ID = '@current';
@@ -767,6 +779,7 @@ snapshotSemanticCsv.addEventListener('click', () => {
 });
 
 function invalidateRawSnapshotComparison() {
+  clearHunkInspection();
   latestSnapshotComparison = null;
   snapshotRawLiveBasis = null;
   snapshotCompareResults.hidden = true;
@@ -776,6 +789,7 @@ function invalidateRawSnapshotComparison() {
   snapshotCompareHunk.replaceChildren();
   snapshotCompareHunkSummary.textContent = '';
   snapshotCompareHunk.disabled = true;
+  snapshotHunkOpen.disabled = true;
   snapshotCompareJson.disabled = true;
   snapshotCompareCsv.disabled = true;
 }
@@ -823,6 +837,110 @@ function snapshotCompareMessage(message, error = false) {
   snapshotCompareStatus.textContent = message;
   snapshotCompareStatus.classList.toggle('error', error);
 }
+function clearHunkInspection() {
+  latestHunkInspection = null;
+  snapshotHunkInspection.hidden = true;
+  snapshotHunkInspectionSummary.textContent = '';
+  snapshotHunkInspectionRows.replaceChildren();
+  snapshotHunkDownloadJson.disabled = true;
+  snapshotHunkDownloadCsv.disabled = true;
+}
+function refreshHunkInspectionControl() {
+  const report = latestSnapshotComparison;
+  const section = report?.sections.find(item =>
+    item.id === snapshotHunkEditor.value && item.kind === 'raw-text');
+  const max = section?.hunk_count || 0;
+  snapshotHunkIndex.max = String(Math.max(1,max));
+  const n = Number(snapshotHunkIndex.value);
+  snapshotHunkOpen.disabled = !report || !max ||
+    !Number.isSafeInteger(n) || n < 1 || n > max ||
+    !snapshotHunkIndex.value.trim();
+}
+snapshotHunkEditor.addEventListener('change', () => {
+  clearHunkInspection();
+  snapshotHunkIndex.value = '1';
+  refreshHunkInspectionControl();
+});
+snapshotHunkIndex.addEventListener('input', () => {
+  clearHunkInspection();
+  refreshHunkInspectionControl();
+});
+snapshotHunkOpen.addEventListener('click', () => {
+  if (snapshotHunkOpen.disabled || !latestSnapshotComparison ||
+      !ensureLiveSnapshotComparisonFresh('raw')) return;
+  try {
+    const report = latestSnapshotComparison;
+    const from = comparisonWorkspaceEntry(report.from.id);
+    const to = comparisonWorkspaceEntry(report.to.id);
+    if (!from || !to) {
+      clearHunkInspection();
+      snapshotCompareMessage('A selected snapshot is no longer available.', true);
+      return;
+    }
+    const result = inspectSnapshotHunk(from, to, snapshotHunkEditor.value,
+      Number(snapshotHunkIndex.value));
+    // Revalidate against current live editors before publishing the result.
+    if (!ensureLiveSnapshotComparisonFresh('raw')) return;
+    latestHunkInspection = result;
+    const h = result.summary;
+    const range = (a,b) => a === null ? '—' :
+      a === b ? String(a) : a + '–' + b;
+    snapshotHunkInspectionSummary.textContent =
+      result.editor.label + ', hunk ' + h.index + '/' +
+      result.alignment.total_hunks + ' · ' + result.alignment.strategy +
+      ' alignment · earlier lines ' + range(h.from_start,h.from_end) +
+      ', later lines ' + range(h.to_start,h.to_end) + '. ' +
+      h.total_rows + ' changed rows (' + h.added + ' added, ' +
+      h.removed + ' removed, ' + h.changed + ' changed); ' +
+      h.preview_rows + ' preview rows, ' + h.omitted_rows +
+      ' omitted. Raw text only; no JSON Patch executed.';
+    const fragment = document.createDocumentFragment();
+    for (const line of result.details) {
+      const tr = document.createElement('tr');
+      tr.className = 'snapshot-line-' + line.change_type;
+      for (const value of [
+        line.change_type,
+        line.from_line === null ? '—' : String(line.from_line),
+        line.from_present ? line.from_preview : '(not present)',
+        line.to_line === null ? '—' : String(line.to_line),
+        line.to_present ? line.to_preview : '(not present)'
+      ]) tr.append(cell('td', value));
+      fragment.append(tr);
+    }
+    snapshotHunkInspectionRows.replaceChildren(fragment);
+    snapshotHunkInspection.hidden = false;
+    snapshotHunkDownloadJson.disabled = false;
+    snapshotHunkDownloadCsv.disabled = false;
+    snapshotCompareMessage('Hunk inspection generated locally with bounded previews.');
+  } catch (error) {
+    clearHunkInspection();
+    snapshotCompareMessage('Could not inspect hunk: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotHunkDownloadJson.addEventListener('click', () => {
+  if (!latestHunkInspection || !ensureLiveSnapshotComparisonFresh('raw')) return;
+  try {
+    downloadReport(serializeHunkInspectionJson(latestHunkInspection),
+      'snapshot-hunk-inspection.json', 'application/json;charset=utf-8');
+    snapshotCompareMessage('Hunk inspection JSON download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('Hunk inspection JSON export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+snapshotHunkDownloadCsv.addEventListener('click', () => {
+  if (!latestHunkInspection || !ensureLiveSnapshotComparisonFresh('raw')) return;
+  try {
+    downloadReport(serializeHunkInspectionCsv(latestHunkInspection),
+      'snapshot-hunk-inspection.csv', 'text/csv;charset=utf-8');
+    snapshotCompareMessage('Hunk inspection CSV download initiated.');
+  } catch (error) {
+    snapshotCompareMessage('Hunk inspection CSV export failed: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
+
 function renderSnapshotRawHunkChooser(report) {
   const options = document.createDocumentFragment();
   const all = document.createElement('option');
@@ -895,6 +1013,9 @@ function renderSnapshotComparison() {
   }
   snapshotCompareSections.replaceChildren(fragment);
   renderSnapshotRawHunkChooser(report);
+  clearHunkInspection();
+  snapshotHunkIndex.value = '1';
+  refreshHunkInspectionControl();
   renderSnapshotComparisonDetails();
 }
 function renderSnapshotComparisonDetails() {
