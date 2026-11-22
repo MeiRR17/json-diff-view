@@ -49,3 +49,35 @@ export function serializeReportCsv(report, { source = 'Before → After' } = {})
   }
   return '\uFEFF' + rows.map(cells => cells.map(formulaSafeCell).join(',')).join('\r\n') + '\r\n';
 }
+
+
+/**
+ * Counts-only structural diff export for sharing approximate change volume.
+ * Does not include JSON paths, source values, patches or individual changes.
+ * Counts reflect *recorded* changes only; a truncated comparison is labeled
+ * as incomplete rather than presented as an exhaustive difference count.
+ */
+export function serializeReportCountsJson(report) {
+  const keys = ['added', 'removed', 'changed'];
+  if (!report || typeof report !== 'object' ||
+      !Array.isArray(report.changes) || report.changes.length > 5000 ||
+      !report.counts || typeof report.counts !== 'object' ||
+      typeof report.truncated !== 'boolean' ||
+      !keys.every(key => Number.isSafeInteger(report.counts[key]) &&
+        report.counts[key] >= 0 && report.counts[key] <= 5000)) {
+    throw new TypeError('Expected a bounded JSON difference report.');
+  }
+  const total = keys.reduce((sum, key) => sum + report.counts[key], 0);
+  if (total !== report.changes.length) {
+    throw new TypeError('JSON difference totals do not match the recorded changes.');
+  }
+  return JSON.stringify({
+    format: 'json-diff-view-counts-v1',
+    complete: !report.truncated,
+    recordedChanges: total,
+    counts: Object.fromEntries(keys.map(key => [key, report.counts[key]])),
+    advisory: report.truncated
+      ? 'Comparison was truncated. Counts represent only recorded changes and are lower bounds, not complete totals.'
+      : 'Counts only; no source values, JSON paths, or patch operations. Aggregates can still reveal sensitive activity.',
+  }, null, 2) + '\n';
+}
