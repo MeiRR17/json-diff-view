@@ -918,10 +918,9 @@ function openHunkSearchHit(hit) {
     to_line: hit.to_line
   };
   refreshHunkInspectionControl();
+  // The inspector focuses and scrolls the exact marked row itself.
+  // Do not scroll back to the panel heading after focusing the match.
   openHunkInspection();
-  if (!snapshotHunkInspection.hidden && !activeHunkSearchHit) {
-    snapshotHunkInspection.scrollIntoView({ block: 'nearest' });
-  }
 }
 function runHunkSearch() {
   if (snapshotHunkSearchRun.disabled || !latestSnapshotComparison ||
