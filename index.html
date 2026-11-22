@@ -277,7 +277,7 @@
               <h4 id="evidence-hotspots-heading">Recurring evidence change paths</h4>
               <button class="button subtle" id="download-evidence-hotspots-csv" type="button" disabled>↓ Hotspots CSV</button>
             </div>
-            <p class="hint">Ranks normalized evidence report paths by the number of comparisons in which they changed. Checkpoint before/after subfields are grouped into their source path and change type. Counts describe saved evidence, not live JSON mutations. Select a row to inspect its latest recorded comparison.</p>
+            <p class="hint">Ranks normalized evidence report paths by the number of comparisons in which they changed. Checkpoint before/after subfields are grouped into their source path and change type. Counts describe saved evidence, not live JSON mutations. Use View path history to inspect every comparison in which the path was recorded, or Inspect latest change for the most recent one.</p>
             <p id="evidence-history-hotspots-summary" role="status" aria-live="polite"></p>
             <div class="evidence-hotspots-filters">
               <label for="evidence-history-hotspots-scope">Evidence area</label>
@@ -297,6 +297,20 @@
                 <tbody id="evidence-history-hotspots-rows"></tbody>
               </table>
             </div>
+            <section class="evidence-hotspot-timeline" id="evidence-hotspot-timeline" aria-labelledby="evidence-hotspot-timeline-heading" hidden>
+              <div class="section-heading">
+                <h5 id="evidence-hotspot-timeline-heading">Selected path history</h5>
+                <button class="button subtle" id="download-evidence-hotspot-timeline-csv" type="button" disabled>↓ Path timeline CSV</button>
+              </div>
+              <p id="evidence-hotspot-timeline-summary" role="status" aria-live="polite"></p>
+              <p class="hint">Shows each archived comparison in which the selected evidence path changed. Open a comparison to inspect the original recorded values; no patch is run.</p>
+              <div class="results-scroll">
+                <table class="diff-table">
+                  <thead><tr><th scope="col">#</th><th scope="col">Earlier file</th><th scope="col">Later file</th><th scope="col">Drift classification</th><th scope="col">Occurrences</th><th scope="col">Inspect</th></tr></thead>
+                  <tbody id="evidence-hotspot-timeline-rows"></tbody>
+                </table>
+              </div>
+            </section>
           </section>
           <section class="evidence-history-detail" id="evidence-history-detail" aria-labelledby="evidence-history-detail-heading" hidden>
             <div class="section-heading">

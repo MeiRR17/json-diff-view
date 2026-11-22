@@ -52,8 +52,8 @@ function hotspotIdentity(path) {
   if (path === '$.checkpoint' || path.startsWith('$.checkpoint.')) scope = 'checkpoint';
   return { path, scope };
 }
-function recordHotspots(byPath, changes, transitionIndex) {
-  const seen = new Set();
+function recordHotspots(byPath, changes, transitionIndex, transition) {
+  const seen = new Map();
   for (const change of changes) {
     const identity = hotspotIdentity(change.path);
     const key = identity.scope + ':' + identity.path;
@@ -67,18 +67,33 @@ function recordHotspots(byPath, changes, transitionIndex) {
         first_transition: transitionIndex,
         last_transition: transitionIndex,
         example_report_path: change.path,
-        transition_indexes: []
+        transition_indexes: [],
+        transition_details: []
       };
       byPath.set(key, entry);
     }
     entry.recorded_occurrences++;
     entry.last_transition = transitionIndex;
     entry.example_report_path = change.path;
-    if (!seen.has(key)) {
-      seen.add(key);
+    let hit = seen.get(key);
+    if (!hit) {
+      hit = {
+        transition_index: transitionIndex,
+        from_file: transition.from_file,
+        to_file: transition.to_file,
+        classification: transition.classification,
+        same_failure_identity: transition.same_failure_identity,
+        report_truncated: transition.report_truncated,
+        occurrences: 0,
+        example_report_path: change.path
+      };
+      seen.set(key, hit);
+      entry.transition_details.push(hit);
       entry.affected_transitions++;
       entry.transition_indexes.push(transitionIndex);
     }
+    hit.occurrences++;
+    hit.example_report_path = change.path;
   }
 }
 function summarizeHotspots(byPath) {
@@ -131,7 +146,13 @@ export function buildEvidenceHistory(archives, { mode = 'adjacent' } = {}) {
     const comparison = compareVerificationArchives(
       archives[fromIndex].text, archives[i].text);
     const assessment = comparison.assessment;
-    recordHotspots(hotspotAccumulator, comparison.report.changes, i);
+    recordHotspots(hotspotAccumulator, comparison.report.changes, i, {
+      from_file: archives[fromIndex].name,
+      to_file: archives[i].name,
+      classification: assessment.classification,
+      same_failure_identity: assessment.sameCase,
+      report_truncated: assessment.truncated
+    });
     if (!assessment.sameCase) differentCases++;
     if (assessment.truncated) truncatedTransitions++;
     const name = assessment.classification;
@@ -198,4 +219,32 @@ export function serializeEvidenceHistoryCsv(history) {
 }
 export function serializeEvidenceHistoryJson(history) {
   return JSON.stringify(history, null, 2) + '\n';
+}
+
+/**
+ * Portable timeline of one selected hotspot. Its rows represent recorded
+ * archived comparisons only; it never materializes or executes JSON Patch.
+ */
+export function serializeEvidenceHotspotTimelineCsv(history, selected) {
+  if (!history || !selected ||
+      !history.hotspots?.paths.includes(selected)) {
+    throw new TypeError('Select a hotspot in the current evidence history.');
+  }
+  const lines = [[
+    'normalized_evidence_path', 'evidence_area', 'transition_number',
+    'from_file', 'to_file', 'classification',
+    'same_failure_identity', 'recorded_occurrences',
+    'report_truncated', 'example_report_path',
+    'comparison_mode', 'archived_not_reverified'
+  ]];
+  for (const detail of selected.transition_details) {
+    lines.push([
+      selected.path, selected.scope, detail.transition_index,
+      detail.from_file, detail.to_file, detail.classification,
+      detail.same_failure_identity, detail.occurrences,
+      detail.report_truncated, detail.example_report_path,
+      history.comparison_mode, 'true'
+    ]);
+  }
+  return '\uFEFF' + lines.map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }

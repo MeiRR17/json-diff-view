@@ -9,7 +9,8 @@ import { serializeFailureBundle, parseFailureBundle, verifyFailureBundle } from 
 import { serializeVerificationEvidence, parseVerificationEvidence } from './evidence.js';
 import { compareVerificationArchives, evidenceChangeScope } from './evidence-compare.js';
 import {
-  buildEvidenceHistory, serializeEvidenceHistoryJson, serializeEvidenceHistoryCsv
+  buildEvidenceHistory, serializeEvidenceHistoryJson, serializeEvidenceHistoryCsv,
+  serializeEvidenceHotspotTimelineCsv
 } from './evidence-history.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -200,6 +201,10 @@ const evidenceHotspotsRows = document.querySelector('#evidence-history-hotspots-
 const evidenceHotspotsScope = document.querySelector('#evidence-history-hotspots-scope');
 const evidenceHotspotsPath = document.querySelector('#evidence-history-hotspots-path');
 const evidenceHotspotsCsvButton = document.querySelector('#download-evidence-hotspots-csv');
+const evidenceHotspotTimelinePanel = document.querySelector('#evidence-hotspot-timeline');
+const evidenceHotspotTimelineSummary = document.querySelector('#evidence-hotspot-timeline-summary');
+const evidenceHotspotTimelineRows = document.querySelector('#evidence-hotspot-timeline-rows');
+const evidenceHotspotTimelineCsvButton = document.querySelector('#download-evidence-hotspot-timeline-csv');
 const evidenceHistoryDetailPanel = document.querySelector('#evidence-history-detail');
 const evidenceHistoryDetailSummary = document.querySelector('#evidence-history-detail-summary');
 const evidenceHistoryDetailRows = document.querySelector('#evidence-history-detail-rows');
@@ -216,6 +221,7 @@ const evidenceHistoryDetailCsvButton = document.querySelector('#download-evidenc
 
 let evidenceHistoryGeneration = 0;
 let latestEvidenceHistory = null;
+let selectedEvidenceHotspot = null;
 let latestEvidenceHistoryFiles = null;
 let historyDetailRequest = 0;
 let latestEvidenceHistoryDetail = null;
@@ -1554,6 +1560,59 @@ evidenceHistoryDetailJsonButton.addEventListener('click',
 evidenceHistoryDetailCsvButton.addEventListener('click',
   () => exportHistoryDetail('csv'));
 
+
+function selectEvidenceHotspot(item) {
+  if (!latestEvidenceHistory ||
+      !latestEvidenceHistory.hotspots.paths.includes(item)) return;
+  selectedEvidenceHotspot = item;
+  evidenceHotspotTimelinePanel.hidden = false;
+  evidenceHotspotTimelineCsvButton.disabled = false;
+  evidenceHotspotTimelineSummary.textContent =
+    'SAVED EVIDENCE — NOT REVERIFIED. ' + item.path +
+    ' · ' + item.affected_transitions + ' of ' +
+    latestEvidenceHistory.transitions.length + ' comparisons affected · ' +
+    item.recorded_occurrences + ' recorded occurrences.' +
+    (latestEvidenceHistory.summary.truncated_transitions ?
+      ' Some comparisons were truncated; the counts may be incomplete.' : '');
+  const fragment = document.createDocumentFragment();
+  for (const hit of item.transition_details) {
+    const row = document.createElement('tr');
+    row.append(cell('td', String(hit.transition_index)));
+    row.append(cell('td', hit.from_file));
+    row.append(cell('td', hit.to_file));
+    row.append(cell('td', hit.classification.replaceAll('-', ' ')));
+    row.append(cell('td', String(hit.occurrences) +
+      (hit.report_truncated ? ' (truncated)' : '')));
+    const actionCell = document.createElement('td');
+    const button = document.createElement('button');
+    button.className = 'button subtle';
+    button.type = 'button';
+    button.textContent = 'Inspect comparison';
+    button.setAttribute('aria-label',
+      'Inspect comparison ' + hit.transition_index + ' for ' + item.path);
+    button.addEventListener('click', () => {
+      openHistoryTransition(hit.transition_index - 1, hit.example_report_path);
+    });
+    actionCell.append(button);
+    row.append(actionCell);
+    fragment.append(row);
+  }
+  evidenceHotspotTimelineRows.replaceChildren(fragment);
+  evidenceHotspotTimelinePanel.scrollIntoView({ block: 'nearest' });
+}
+evidenceHotspotTimelineCsvButton.addEventListener('click', () => {
+  const history = latestEvidenceHistory;
+  const item = selectedEvidenceHotspot;
+  if (!history || !item) return;
+  try {
+    downloadReport(serializeEvidenceHotspotTimelineCsv(history, item),
+      'archived-evidence-path-timeline.csv', 'text/csv;charset=utf-8');
+    historyMessage('Selected archived evidence path timeline exported as CSV.');
+  } catch (error) {
+    historyMessage('Could not export the selected path timeline: ' +
+      (error instanceof Error ? error.message : 'unknown error'), true);
+  }
+});
 function renderEvidenceHotspots() {
   const history = latestEvidenceHistory;
   if (!history || !history.hotspots) return;
@@ -1600,6 +1659,13 @@ function renderEvidenceHotspots() {
       openHistoryTransition(item.last_transition - 1, item.example_report_path);
     });
     actionCell.append(button);
+    const timeline = document.createElement('button');
+    timeline.className = 'button subtle';
+    timeline.type = 'button';
+    timeline.textContent = 'View path history';
+    timeline.setAttribute('aria-label', 'View archived history of ' + item.path);
+    timeline.addEventListener('click', () => selectEvidenceHotspot(item));
+    actionCell.append(timeline);
     row.append(actionCell);
     fragment.append(row);
   }
@@ -1650,6 +1716,11 @@ function invalidateEvidenceHistory() {
   latestEvidenceHistoryFiles = null;
   evidenceHistoryPanel.hidden = true;
   evidenceHotspotsPanel.hidden = true;
+  selectedEvidenceHotspot = null;
+  evidenceHotspotTimelinePanel.hidden = true;
+  evidenceHotspotTimelineSummary.textContent = '';
+  evidenceHotspotTimelineRows.replaceChildren();
+  evidenceHotspotTimelineCsvButton.disabled = true;
   evidenceHotspotsSummary.textContent = '';
   evidenceHotspotsRows.replaceChildren();
   evidenceHotspotsScope.value = 'all';

@@ -363,3 +363,14 @@ a{color:#155a98}
 .evidence-hotspots td .button{white-space:nowrap;font-size:.8rem}
 @media(max-width:700px){.evidence-hotspots-filters label{width:100%}.evidence-hotspots-filters select{flex:1 1 160px}}
 @media(prefers-color-scheme:dark){.evidence-hotspots{border-color:#3b5068}#evidence-history-hotspots-summary,.evidence-hotspots-filters label{color:#b6cce3}.evidence-hotspots-filters input,.evidence-hotspots-filters select{color:#e3f1ff;background:#19293b;border-color:#536783}}
+
+/* Per-path occurrence timeline built from archived comparison reports. */
+.evidence-hotspot-timeline{margin:16px 0 0;padding:16px 0 0;border-top:1px solid #d8e1ed}
+.evidence-hotspot-timeline .section-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.evidence-hotspot-timeline h5{font-size:.9rem;margin:0}
+#evidence-hotspot-timeline-summary{font-size:.85rem;font-weight:650;color:#3d5471;overflow-wrap:anywhere}
+.evidence-hotspot-timeline td{overflow-wrap:anywhere}
+.evidence-hotspot-timeline td .button{white-space:nowrap;font-size:.8rem}
+.evidence-hotspots td:last-child{display:flex;flex-wrap:wrap;gap:6px}
+@media(max-width:700px){.evidence-hotspot-timeline .section-heading .button{width:100%}}
+@media(prefers-color-scheme:dark){.evidence-hotspot-timeline{border-color:#3b5068}#evidence-hotspot-timeline-summary{color:#b6cce3}}
