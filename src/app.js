@@ -1,4 +1,5 @@
 import { diffJson, parseJson } from './diff.js';
+import { findDuplicateJsonKeys } from './duplicate-keys.js';
 import { createJsonPatch, serializeJsonPatch } from './patch.js';
 import { applyJsonPatch, applyJsonPatchPrefix, JsonPatchOperationError } from './apply.js';
 import { serializeReportJson, serializeReportCsv, serializeReportCountsJson, serializeReportCountsCsv, serializeReportPathsCsv } from './export.js';
@@ -140,6 +141,7 @@ const workspaceAutoBackup = document.querySelector('#workspace-backup-before-app
 const afterEditor = document.querySelector('#after');
 const status = document.querySelector('#status');
 const summary = document.querySelector('#summary');
+const duplicateKeyNotice = document.querySelector('#duplicate-key-notice');
 const changeRows = document.querySelector('#changes');
 const filterPath = document.querySelector('#filter-path');
 const filterType = document.querySelector('#filter-type');
@@ -4646,6 +4648,8 @@ function resetReport() {
   copyPatchButton.disabled = downloadPatchButton.disabled = true;
   summary.hidden = true;
   summary.replaceChildren();
+  duplicateKeyNotice.hidden = true;
+  duplicateKeyNotice.replaceChildren();
   const row = document.createElement('tr');
   const message = cell('td', 'Differences will appear here.', 'empty');
   message.colSpan = 3;
@@ -4692,6 +4696,39 @@ function refreshGeneratedPatch() {
   }
 }
 
+function renderDuplicateKeyNotice(before, after) {
+  duplicateKeyNotice.replaceChildren();
+  const findings = [
+    ...before.duplicates.map(item => ({ side: 'Before', ...item })),
+    ...after.duplicates.map(item => ({ side: 'After', ...item })),
+  ];
+  if (!findings.length && !before.truncated && !after.truncated) {
+    duplicateKeyNotice.hidden = true;
+    return;
+  }
+  duplicateKeyNotice.hidden = false;
+  duplicateKeyNotice.className = 'duplicate-key-notice';
+  const heading = document.createElement('strong');
+  heading.textContent = 'Duplicate JSON object keys detected';
+  duplicateKeyNotice.append(heading);
+  const intro = document.createElement('p');
+  intro.textContent = 'JSON.parse keeps only the last value for a repeated key. The structural comparison below reflects the parsed documents, not every value in the original source.';
+  duplicateKeyNotice.append(intro);
+  if (findings.length) {
+    const list = document.createElement('ul');
+    for (const item of findings) {
+      const line = document.createElement('li');
+      line.textContent = item.side + ' · ' + item.path + ' · ' + item.occurrences + ' occurrences';
+      list.append(line);
+    }
+    duplicateKeyNotice.append(list);
+  }
+  if (before.truncated || after.truncated) {
+    const limit = document.createElement('p');
+    limit.textContent = 'The finding list reached its 200-key safety limit; additional paths may be omitted.';
+    duplicateKeyNotice.append(limit);
+  }
+}
 function compare() {
   invalidatePatchResult();
   invalidateStepPreview();
@@ -4700,8 +4737,11 @@ function compare() {
   try {
     fitInput(beforeEditor.value, 'Before');
     fitInput(afterEditor.value, 'After');
+    const leftDuplicates = findDuplicateJsonKeys(beforeEditor.value);
+    const rightDuplicates = findDuplicateJsonKeys(afterEditor.value);
     const left = parseJson(beforeEditor.value, 'Before');
     const right = parseJson(afterEditor.value, 'After');
+    renderDuplicateKeyNotice(leftDuplicates, rightDuplicates);
     const report = diffJson(left, right);
     latestReport = report;
     renderReport(report);
