@@ -8,6 +8,7 @@ A dependency-free, static web app for developers, API users, QA engineers, and a
 
 - Paste JSON in two side-by-side editors or open local \`.json\` files. Imported documents are syntax-checked and require confirmation before replacing existing contents; stale asynchronous file loads cannot overwrite edits, swapped documents, cleared editors or a newly loaded sample.
 - Compare object keys and nested structures with exact \`$\` paths.
+- **Duplicate object-key detection:** before parsing, a bounded scan detects repeated keys in either editor and reports their JSON Pointer paths and occurrence counts. This matters because `JSON.parse` keeps only the last value for a duplicate key, so the normal structural comparison cannot expose overwritten source values. Detection is read-only, omits source text from the report and caps findings at 200; excessively large or deeply nested documents are rejected by explicit safety limits.
 - Highlight additions, removals, and changes in aligned before/after columns. Filter recorded changes by a case-insensitive JSON path substring and by change type; navigate 100-result pages without rendering all 5,000 entries simultaneously.
 - Load an illustrative sample, swap documents, or clear editors.
 - Copy the full JSON change report or download it in **JSON** or **CSV** format. CSV is UTF-8 with spreadsheet-formula neutralization; exports include recorded changes regardless of UI filters or pages.
@@ -155,6 +156,7 @@ Then visit \`http://localhost:8000\`. Browser security policies for ES modules m
 index.html       Accessible editor and diff table
 styles.css       Responsive layout, light/dark themes
 src/diff.js      Pure structural comparison and JSON parsing
+src/duplicate-keys.js  Bounded scan for repeated object member names in original JSON text
 src/patch.js     RFC 6902 patch generation and serialization
 src/apply.js     Detached RFC 6902 patch application, own-property pointers, safe move/copy
 src/app.js       Browser interactions, file import, report rendering
