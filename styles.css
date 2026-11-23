@@ -588,3 +588,11 @@ a{color:#155a98}
 @media(max-width:700px){
   .snapshot-hunk-search-controls .snapshot-hunk-search-toggle{flex:1 1 44%}
 }
+
+/* Duplicate object keys are reported before semantic comparison. */
+.duplicate-key-notice{margin:14px 0;padding:13px 16px;border:1px solid #b7791f;border-inline-start-width:4px;border-radius:9px;background:#fff9eb;color:#65430f;font-size:13px;line-height:1.5}
+.duplicate-key-notice[hidden]{display:none}
+.duplicate-key-notice strong{display:block;margin-bottom:5px;font-size:14px}
+.duplicate-key-notice p{margin:5px 0}
+.duplicate-key-notice ul{margin:7px 0 0;padding-inline-start:22px;max-height:220px;overflow:auto}
+@media(prefers-color-scheme:dark){.duplicate-key-notice{background:#392d18;border-color:#ba8a3a;color:#f8e6c2}}
