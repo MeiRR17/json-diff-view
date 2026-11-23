@@ -4737,10 +4737,10 @@ function compare() {
   try {
     fitInput(beforeEditor.value, 'Before');
     fitInput(afterEditor.value, 'After');
-    const leftDuplicates = findDuplicateJsonKeys(beforeEditor.value);
-    const rightDuplicates = findDuplicateJsonKeys(afterEditor.value);
     const left = parseJson(beforeEditor.value, 'Before');
     const right = parseJson(afterEditor.value, 'After');
+    const leftDuplicates = findDuplicateJsonKeys(beforeEditor.value);
+    const rightDuplicates = findDuplicateJsonKeys(afterEditor.value);
     renderDuplicateKeyNotice(leftDuplicates, rightDuplicates);
     const report = diffJson(left, right);
     latestReport = report;
