@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Compare two JSON documents locally, with readable side-by-side changes and no upload.">
+  <title>JSON Diff View — Compare JSON in your browser</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./src/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#results">Skip to differences</a>
+  <header class="site-header">
+    <div class="container">
+      <div class="brand">JSON <span>Diff View</span></div>
+      <p class="subtitle">See exactly what changed between two JSON documents.</p>
+      <p class="privacy">Local by design: your JSON stays in this browser. No server, account, or tracker.</p>
+    </div>
+  </header>
+  <main class="container">
+    <section aria-labelledby="editor-heading">
+      <div class="section-heading">
+        <h1 id="editor-heading">Compare documents</h1>
+        <button class="button subtle" type="button" id="load-sample">Load sample</button>
+      </div>
+      <div class="editors">
+        <div class="editor">
+          <div class="editor-heading">
+            <label for="before">Before</label>
+            <label class="file-button" for="before-file">Open .json file</label>
+            <input id="before-file" type="file" accept=".json,application/json,text/plain" hidden>
+          </div>
+          <textarea id="before" spellcheck="false" aria-describedby="before-tip" placeholder='{"version": 1, "active": true}'></textarea>
+          <p id="before-tip" class="hint">JSON object, array, string, number, boolean, or null.</p>
+        </div>
+        <div class="editor">
+          <div class="editor-heading">
+            <label for="after">After</label>
+            <label class="file-button" for="after-file">Open .json file</label>
+            <input id="after-file" type="file" accept=".json,application/json,text/plain" hidden>
+          </div>
+          <textarea id="after" spellcheck="false" aria-describedby="after-tip" placeholder='{"version": 2, "active": false}'></textarea>
+          <p id="after-tip" class="hint">Arrays are compared by index; object keys by name.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="button primary" type="button" id="compare">Compare JSON</button>
+        <button class="button" type="button" id="swap">Swap sides</button>
+        <button class="button" type="button" id="clear">Clear</button>
+        <span class="shortcut">Tip: Ctrl/⌘ + Enter to compare</span>
+      </div>
+      <div class="workspace-actions" role="group" aria-label="Save or restore all editor drafts">
+        <button class="button subtle" type="button" id="download-workspace">↓ Save workspace</button>
+        <button class="button subtle" type="button" id="import-workspace">↑ Open workspace</button>
+        <button class="button subtle" type="button" id="undo-workspace-restore" disabled
+          title="Available after a workspace restore changes editor content or settings.">Undo restore</button>
+        <input id="workspace-file" type="file" accept=".json,application/json" hidden>
+        <span class="hint">Includes three raw editor drafts and patch/range settings. Opening a workspace previews the changes; you choose which sections to restore. Undo restore can revert the last confirmed replacement without touching unrelated edits; download a pre-restore backup to preserve recovery across reloads.</span>
+      </div>
+      <p id="workspace-status" class="hint" role="status" aria-live="polite">Select a saved workspace file to preview and restore chosen sections.</p>
+      <section class="workspace-snapshots" aria-labelledby="workspace-snapshots-heading">
+        <div class="section-heading">
+          <h2 id="workspace-snapshots-heading">Manual session snapshots</h2>
+        </div>
+        <p class="hint">Keep several named editing states in memory for this tab. No autosave, server upload or persistent browser storage. Saved snapshots disappear on reload unless downloaded as workspace files. Rename an existing point or update its stored contents without increasing the number of snapshots. Updating requires confirmation and cannot modify the current editors.</p>
+        <div class="workspace-snapshot-controls">
+          <label for="workspace-snapshot-name">Snapshot name</label>
+          <input id="workspace-snapshot-name" type="text" maxlength="80"
+            placeholder="e.g. Before migration">
+          <button class="button subtle" type="button" id="workspace-snapshot-save">Save in tab</button>
+          <label for="workspace-snapshot-select">Saved snapshot</label>
+          <select id="workspace-snapshot-select" disabled>
+            <option value="">No session snapshots</option>
+          </select>
+          <div class="workspace-snapshot-actions">
+            <button class="button subtle" type="button" id="workspace-snapshot-preview" disabled>Preview restore</button>
+            <button class="button subtle" type="button" id="workspace-snapshot-download" disabled>↓ Download snapshot</button>
+            <button class="button subtle" type="button" id="workspace-snapshot-delete" disabled>Delete snapshot</button>
+          </div>
+          <div class="workspace-snapshot-edit">
+            <label for="workspace-snapshot-rename-name">Selected snapshot name</label>
+            <input type="text" id="workspace-snapshot-rename-name" maxlength="80" disabled
+              placeholder="Select a snapshot above">
+            <button class="button subtle" type="button" id="workspace-snapshot-rename" disabled>Rename selected</button>
+            <button class="button subtle" type="button" id="workspace-snapshot-recapture" disabled>Update selected from editors</button>
+          </div>
+        </div>
+        <p class="hint" id="workspace-snapshot-summary" role="status" aria-live="polite">No manual session snapshots yet.</p>
+        <section class="workspace-snapshot-compare" aria-labelledby="snapshot-compare-heading">
+          <h3 id="snapshot-compare-heading">Compare saved snapshots</h3>
+          <p class="hint">Compare a saved snapshot with another snapshot or with the current unsaved workspace, without modifying any editor. The current draft is captured only when Compare is clicked, not added to saved snapshots. Raw drafts may be incomplete JSON; line alignment uses bounded LCS with a positional fallback for large changes, not semantic JSON comparison.</p>
+          <div class="snapshot-compare-controls">
+            <label for="snapshot-compare-from">Compare from</label>
+            <select id="snapshot-compare-from" disabled></select>
+            <label for="snapshot-compare-to">Compare to</label>
+            <select id="snapshot-compare-to" disabled></select>
+            <button class="button subtle" type="button" id="snapshot-compare-run" disabled>Compare saved drafts</button>
+            <button class="button subtle" type="button" id="snapshot-semantic-run" disabled>Compare JSON structure</button>
+          </div>
+          <p class="hint" id="snapshot-compare-status" role="status" aria-live="polite">Save at least one snapshot to compare it with the current workspace or another saved point.</p>
+          <div id="snapshot-compare-results" hidden>
+            <div class="section-heading">
+              <h4>Snapshot comparison</h4>
+              <div class="result-actions">
+                <button class="button subtle" type="button" id="snapshot-compare-json" disabled>↓ Comparison JSON</button>
+                <button class="button subtle" type="button" id="snapshot-compare-csv" disabled>↓ Comparison CSV</button>
+              </div>
+            </div>
+            <p id="snapshot-compare-summary" role="status" aria-live="polite"></p>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Workspace section</th><th scope="col">Status</th><th scope="col">Before → after</th><th scope="col">Preview rows</th></tr></thead>
+                <tbody id="snapshot-compare-sections"></tbody>
+              </table>
+            </div>
+            <div class="snapshot-compare-detail-controls">
+              <label for="snapshot-compare-area">Show raw line previews</label>
+              <select id="snapshot-compare-area">
+                <option value="all">All sections</option>
+                <option value="before">Before editor</option>
+                <option value="after">After editor</option>
+                <option value="patch">JSON Patch editor</option>
+                <option value="settings">Patch and range settings</option>
+              </select>
+              <label for="snapshot-compare-change-kind">Line change type</label>
+              <select id="snapshot-compare-change-kind">
+                <option value="all">All types</option>
+                <option value="added">Added</option>
+                <option value="removed">Removed</option>
+                <option value="changed">Changed</option>
+              </select>
+              <label for="snapshot-compare-hunk">Change hunk</label>
+              <select id="snapshot-compare-hunk" disabled>
+                <option value="all">All captured change hunks</option>
+              </select>
+            </div>
+            <p id="snapshot-compare-hunk-summary" class="hint" role="status" aria-live="polite"></p>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Hunk</th><th scope="col">Type</th><th scope="col">Field</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
+                <tbody id="snapshot-compare-rows"></tbody>
+              </table>
+            </div>
+            <section class="snapshot-hunk-search" aria-labelledby="snapshot-hunk-search-heading">
+              <h4 id="snapshot-hunk-search-heading">Search changed lines across all hunks</h4>
+              <p class="hint">Search complete changed lines, including those beyond the current preview. Filter by line change, phrase transition, case, and whole-word boundaries; page through matches and highlight a result at its exact hunk location. Only bounded snippets and locations are retained. Search never parses JSON or executes patches.</p>
+              <div class="snapshot-hunk-search-controls">
+                <label for="snapshot-hunk-search-query">Find text</label>
+                <input id="snapshot-hunk-search-query" type="search" maxlength="120" placeholder="Property, error, or value">
+                <label for="snapshot-hunk-search-editor">Editor</label>
+                <select id="snapshot-hunk-search-editor">
+                  <option value="all">All editors</option>
+                  <option value="before">Before</option>
+                  <option value="after">After</option>
+                  <option value="patch">JSON Patch</option>
+                </select>
+                <label for="snapshot-hunk-search-side">Side</label>
+                <select id="snapshot-hunk-search-side">
+                  <option value="both">Both</option>
+                  <option value="earlier">Earlier only</option>
+                  <option value="later">Later only</option>
+                </select>
+                <label for="snapshot-hunk-search-type">Line change</label>
+                <select id="snapshot-hunk-search-type">
+                  <option value="all">All types</option>
+                  <option value="added">Added lines</option>
+                  <option value="removed">Removed lines</option>
+                  <option value="changed">Changed lines</option>
+                </select>
+                <label for="snapshot-hunk-search-transition">Phrase transition</label>
+                <select id="snapshot-hunk-search-transition">
+                  <option value="all">All phrase transitions</option>
+                  <option value="introduced">Introduced (later only)</option>
+                  <option value="resolved">Resolved (earlier only)</option>
+                  <option value="persistent">Present on both sides</option>
+                </select>
+                <label class="snapshot-hunk-search-toggle"><input type="checkbox" id="snapshot-hunk-search-case"> Case-sensitive</label>
+                <label class="snapshot-hunk-search-toggle"><input type="checkbox" id="snapshot-hunk-search-word"> Whole word</label>
+                <button class="button subtle" id="snapshot-hunk-search-run" type="button" disabled>Search changed lines</button>
+              </div>
+              <div id="snapshot-hunk-search-results" hidden>
+                <div class="section-heading">
+                  <h4>Changed-line matches</h4>
+                  <div class="result-actions">
+                    <button class="button subtle" id="snapshot-hunk-search-json" type="button" disabled>↓ Search JSON</button>
+                    <button class="button subtle" id="snapshot-hunk-search-csv" type="button" disabled>↓ Search CSV</button>
+                  </div>
+                </div>
+                <p id="snapshot-hunk-search-summary" class="hint" role="status" aria-live="polite"></p>
+                <div class="snapshot-hunk-search-pages" role="group" aria-label="Navigate search result pages">
+                  <label for="snapshot-hunk-search-page">Match page</label>
+                  <input type="number" id="snapshot-hunk-search-page" value="1" min="1" step="1">
+                  <button type="button" class="button subtle" id="snapshot-hunk-search-previous" disabled>Previous matches</button>
+                  <button type="button" class="button subtle" id="snapshot-hunk-search-next" disabled>Next matches</button>
+                  <span id="snapshot-hunk-search-page-info" role="status" aria-live="polite"></span>
+                </div>
+                <div class="results-scroll">
+                  <table class="diff-table">
+                    <thead><tr><th scope="col">Editor</th><th scope="col">Change</th><th scope="col">Matched</th><th scope="col">Phrase transition</th><th scope="col">Hunk / page</th><th scope="col">Earlier line</th><th scope="col">Earlier snippet</th><th scope="col">Later line</th><th scope="col">Later snippet</th><th scope="col">Inspect</th></tr></thead>
+                    <tbody id="snapshot-hunk-search-rows"></tbody>
+                  </table>
+                </div>
+                <p class="hint">Each request scans at most 200,000 changed rows and retains only the selected page of up to 100 matches, with 240-character snippets. Other pages are recomputed on demand and are not kept in memory. Phrase transitions describe presence in each paired changed row (not the whole JSON document). Whole-word uses Unicode letters, numbers, combining marks and underscore as word characters. Search results are labeled incomplete if changed rows remain unexamined. Selecting a match highlights its exact changed row in the hunk inspector. Exports contain the current match page only, not complete drafts.</p>
+              </div>
+            </section>
+            <section class="snapshot-hunk-on-demand" aria-labelledby="snapshot-hunk-inspect-heading">
+              <h4 id="snapshot-hunk-inspect-heading">Inspect any change hunk</h4>
+              <p class="hint">Open a numbered hunk beyond the initial 48 summaries or 180 displayed rows. The selected editor is realigned locally when requested; use Previous/Next hunk for consecutive changes and optionally include unchanged context. No editor will be modified.</p>
+              <div class="snapshot-hunk-on-demand-controls">
+                <label for="snapshot-hunk-editor">Editor</label>
+                <select id="snapshot-hunk-editor">
+                  <option value="before">Before editor</option>
+                  <option value="after">After editor</option>
+                  <option value="patch">JSON Patch editor</option>
+                </select>
+                <label for="snapshot-hunk-index">Hunk number</label>
+                <input id="snapshot-hunk-index" type="number" min="1" max="1" step="1" value="1">
+                <label for="snapshot-hunk-context">Context lines each side</label>
+                <select id="snapshot-hunk-context">
+                  <option value="0">None</option>
+                  <option value="1">1 line</option>
+                  <option value="2">2 lines</option>
+                  <option value="3" selected>3 lines</option>
+                  <option value="5">5 lines</option>
+                </select>
+                <button class="button subtle" type="button" id="snapshot-hunk-previous" disabled>Previous hunk</button>
+                <button class="button subtle" type="button" id="snapshot-hunk-open" disabled>Inspect hunk</button>
+                <button class="button subtle" type="button" id="snapshot-hunk-next" disabled>Next hunk</button>
+              </div>
+              <div class="snapshot-hunk-page-controls" role="group" aria-label="Navigate within a long change hunk">
+                <label for="snapshot-hunk-page">Changed-row page</label>
+                <input id="snapshot-hunk-page" type="number" min="1" step="1" value="1">
+                <button class="button subtle" type="button" id="snapshot-hunk-page-previous" disabled>Previous page</button>
+                <button class="button subtle" type="button" id="snapshot-hunk-page-next" disabled>Next page</button>
+                <span id="snapshot-hunk-page-info" role="status" aria-live="polite"></span>
+              </div>
+              <div id="snapshot-hunk-inspection" hidden>
+                <div class="section-heading">
+                  <h4>Selected hunk inspection</h4>
+                  <div class="result-actions">
+                    <button class="button subtle" type="button" id="snapshot-hunk-download-json" disabled>↓ Hunk JSON</button>
+                    <button class="button subtle" type="button" id="snapshot-hunk-download-csv" disabled>↓ Hunk CSV</button>
+                  </div>
+                </div>
+                <p id="snapshot-hunk-inspection-summary" role="status" aria-live="polite"></p>
+                <div class="results-scroll">
+                  <table class="diff-table">
+                    <thead><tr><th scope="col">Type</th><th scope="col">Earlier line</th><th scope="col">Earlier preview</th><th scope="col">Later line</th><th scope="col">Later preview</th></tr></thead>
+                    <tbody id="snapshot-hunk-inspection-rows"></tbody>
+                  </table>
+                </div>
+                <p class="hint">A long hunk is paged in windows of 180 changed rows. Open any positive page number, or move to the previous/next page after the first inspection. Up to 5 unchanged context lines appear only on the first and last page of the whole hunk; intermediate pages do not invent neighboring matches. Each row preview is limited to 240 characters. JSON/CSV exports contain only the currently displayed window plus its counts and page metadata, never complete editor drafts.</p>
+              </div>
+            </section>
+            <p class="hint">Changes are grouped into hunks separated by unchanged aligned lines; the selector opens any hunk with retained preview rows. Up to 48 initial hunk summaries and 180 changed-line previews per editor, with 240 characters per line, are recorded. Smaller changed regions use LCS alignment (up to 1,000 lines per side and 400,000 matrix cells); larger regions use a clearly marked positional fallback. Exports contain preview rows and strategy metadata, not complete editor drafts. Line snippets may be sensitive.</p>
+          </div>
+          <section class="snapshot-semantic-results" id="snapshot-semantic-results" aria-labelledby="snapshot-semantic-heading" hidden>
+            <div class="section-heading">
+              <h4 id="snapshot-semantic-heading">Structural JSON changes between saved snapshots</h4>
+              <div class="result-actions">
+                <button class="button subtle" type="button" id="snapshot-semantic-json" disabled>↓ Structural JSON</button>
+                <button class="button subtle" type="button" id="snapshot-semantic-csv" disabled>↓ Structural CSV</button>
+              </div>
+            </div>
+            <p class="hint">Each editor is parsed independently. Invalid or blank JSON prevents structural comparison only for that editor. JSON Patch contents are compared as JSON data, never run. Report values are preview-only and capped.</p>
+            <p id="snapshot-semantic-summary" role="status" aria-live="polite"></p>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Editor</th><th scope="col">Parse status</th><th scope="col">Recorded changes</th><th scope="col">Preview rows</th></tr></thead>
+                <tbody id="snapshot-semantic-sections"></tbody>
+              </table>
+            </div>
+            <div class="snapshot-semantic-filters" role="group" aria-label="Filter snapshot structural changes">
+              <label for="snapshot-semantic-editor">Editor</label>
+              <select id="snapshot-semantic-editor">
+                <option value="all">All editors</option>
+                <option value="before">Before</option>
+                <option value="after">After</option>
+                <option value="patch">JSON Patch as data</option>
+              </select>
+              <label for="snapshot-semantic-type">Change type</label>
+              <select id="snapshot-semantic-type">
+                <option value="all">All changes</option>
+                <option value="added">Added</option>
+                <option value="removed">Removed</option>
+                <option value="changed">Changed</option>
+              </select>
+              <label for="snapshot-semantic-path">Path contains</label>
+              <input id="snapshot-semantic-path" type="search" placeholder="e.g. $.settings" autocomplete="off">
+            </div>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Editor</th><th scope="col">Type</th><th scope="col">Path preview</th><th scope="col">Earlier value preview</th><th scope="col">Later value preview</th></tr></thead>
+                <tbody id="snapshot-semantic-rows"></tbody>
+              </table>
+            </div>
+            <nav class="results-nav" id="snapshot-semantic-nav" aria-label="Structural comparison preview pages" hidden>
+              <button class="button subtle" type="button" id="snapshot-semantic-prev">Previous page</button>
+              <span id="snapshot-semantic-page-info" aria-live="polite"></span>
+              <button class="button subtle" type="button" id="snapshot-semantic-next">Next page</button>
+            </nav>
+            <p class="hint">Up to 250 recorded changes per editor, with 240-character value previews and 300-character path previews. The underlying engine stops at 5,000 changes, 100,000 visited values or depth 200. Exports omit complete source values; snippets may still be sensitive.</p>
+          </section>
+        </section>
+        <div class="workspace-collection-actions" role="group" aria-label="Export or import a collection of snapshots">
+          <button class="button subtle" type="button" id="workspace-collection-export" disabled>↓ Download all snapshots</button>
+          <label for="workspace-collection-mode">When importing a collection</label>
+          <select id="workspace-collection-mode">
+            <option value="append">Append to snapshots in this tab</option>
+            <option value="replace">Replace all snapshots in this tab</option>
+          </select>
+          <button class="button subtle" type="button" id="workspace-collection-import">↑ Open snapshot collection</button>
+          <input id="workspace-collection-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <p class="hint">Review and select individual entries after opening a collection. Append keeps existing snapshots; Replace discards them only after confirmation. The 8-snapshot / 24 MiB memory limit remains enforced, with a 32 MiB input file limit.</p>
+        <section class="workspace-collection-preview" id="workspace-collection-preview" aria-labelledby="workspace-collection-preview-heading" hidden>
+          <h3 id="workspace-collection-preview-heading">Review snapshot collection import</h3>
+          <p class="hint">Choose which named workspaces to import. Existing editor drafts and patches are never read or changed by this operation.</p>
+          <div class="workspace-collection-selection-actions">
+            <button class="button subtle" type="button" id="workspace-collection-select-all">Select all</button>
+            <button class="button subtle" type="button" id="workspace-collection-select-none">Select none</button>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">Import / snapshot</th><th scope="col">Workspace size</th><th scope="col">Name</th></tr></thead>
+              <tbody id="workspace-collection-preview-rows"></tbody>
+            </table>
+          </div>
+          <p class="hint" id="workspace-collection-preview-summary" role="status" aria-live="polite"></p>
+          <div class="workspace-collection-selection-actions">
+            <button class="button primary" type="button" id="workspace-collection-apply" disabled>Import selected snapshots</button>
+            <button class="button subtle" type="button" id="workspace-collection-cancel">Cancel import</button>
+          </div>
+        </section>
+      </section>
+      <section class="workspace-preview" id="workspace-preview" aria-labelledby="workspace-preview-heading" hidden>
+        <h2 id="workspace-preview-heading">Review workspace restore</h2>
+        <p id="workspace-preview-summary" class="hint" role="status" aria-live="polite"></p>
+        <p class="hint">Choose which sections to restore. Your existing text stays unchanged until you confirm. Editor contents are never parsed or executed during this review.</p>
+        <div class="workspace-choices" role="group" aria-label="Choose workspace sections to restore">
+          <label><input type="checkbox" id="workspace-restore-before" checked> Before editor</label>
+          <label><input type="checkbox" id="workspace-restore-after" checked> After editor</label>
+          <label><input type="checkbox" id="workspace-restore-patch" checked> JSON Patch editor</label>
+          <label><input type="checkbox" id="workspace-restore-options" checked> Patch and range settings</label>
+        </div>
+        <div class="results-scroll">
+          <table class="diff-table">
+            <thead><tr><th scope="col">Section</th><th scope="col">Current → saved</th><th scope="col">Impact</th></tr></thead>
+            <tbody id="workspace-preview-rows"></tbody>
+          </table>
+        </div>
+        <div class="workspace-backup-controls">
+          <label for="workspace-backup-before-apply">
+            <input id="workspace-backup-before-apply" type="checkbox" checked>
+            Download complete current-workspace backup before applying (recommended)
+          </label>
+          <button class="button subtle" type="button" id="download-pre-restore-workspace" disabled>↓ Back up current workspace now</button>
+          <p class="hint">The backup includes all three raw editor drafts and settings, even unchecked sections. It can be reopened after a reload using Open workspace. Your browser controls whether downloads are saved; check Downloads before relying on the file.</p>
+        </div>
+        <div class="workspace-preview-actions">
+          <button class="button primary" type="button" id="apply-workspace" disabled>Apply selected sections</button>
+          <button class="button subtle" type="button" id="cancel-workspace">Cancel restore</button>
+        </div>
+      </section>
+      <p id="status" class="status" aria-live="polite" role="status">Paste two JSON documents or load a sample to begin.</p>
+    </section>
+    <section id="results" aria-labelledby="results-heading">
+      <div class="section-heading">
+        <h2 id="results-heading">Differences</h2>
+        <div class="result-actions">
+          <button class="button subtle" type="button" id="copy" disabled>Copy change report</button>
+          <button class="button subtle" type="button" id="download-report-json" disabled>↓ Report JSON</button>
+          <button class="button subtle" type="button" id="download-report-csv" disabled>↓ Report CSV</button>
+          <button class="button subtle" type="button" id="download-report-counts" disabled>↓ Counts JSON</button>
+          <button class="button subtle" type="button" id="download-report-counts-csv" disabled>↓ Counts CSV</button>
+          <button class="button subtle" type="button" id="download-report-paths-csv" disabled>↓ Paths CSV</button>
+          <button class="button subtle" type="button" id="copy-patch" disabled>Copy JSON Patch</button>
+          <button class="button subtle" type="button" id="download-patch" disabled>↓ Download .jsonpatch</button>
+        </div>
+      </div>
+      <div class="patch-direction-control">
+        <label for="patch-direction">Generate JSON Patch</label>
+        <select id="patch-direction">
+          <option value="forward">Before → After (forward)</option>
+          <option value="reverse">After → Before (reverse / rollback)</option>
+        </select>
+      </div>
+      <label class="patch-guard-option" for="guard-patch">
+        <input type="checkbox" id="guard-patch">
+        Generate guarded JSON Patch (add <code>test</code> before removes and replacements)
+      </label>
+      <p class="hint patch-guard-hint">Guards reject unexpected values at changed paths; additions and unrelated changes are not guarded. Large guarded patches may exceed the export limits.</p>
+      <div id="summary" class="summary" aria-live="polite" hidden></div>
+      <aside id="duplicate-key-notice" class="duplicate-key-notice" role="status" aria-live="polite" hidden></aside>
+      <div class="filter-controls" role="group" aria-label="Filter differences">
+        <label for="filter-path">JSON path contains</label>
+        <input id="filter-path" type="search" placeholder="e.g. $.settings" autocomplete="off" disabled>
+        <label for="filter-type">Change type</label>
+        <select id="filter-type" disabled>
+          <option value="all">All types</option>
+          <option value="added">Added</option>
+          <option value="removed">Removed</option>
+          <option value="changed">Changed</option>
+        </select>
+        <button class="button subtle" id="clear-filters" type="button" disabled>Reset filters</button>
+        <span id="filter-summary" class="filter-summary" aria-live="polite">Compare documents to filter changes.</span>
+      </div>
+      <div class="results-scroll">
+        <table class="diff-table">
+          <thead><tr><th scope="col">JSON path</th><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+          <tbody id="changes">
+            <tr><td class="empty" colspan="3">Differences will appear here.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <nav class="results-nav" id="results-nav" aria-label="Difference pages" hidden>
+        <button class="button subtle" type="button" id="page-previous">Previous page</button>
+        <span id="page-summary" aria-live="polite"></span>
+        <button class="button subtle" type="button" id="page-next">Next page</button>
+      </nav>
+    </section>
+    <section class="patch-workspace" aria-labelledby="patch-heading">
+      <div class="section-heading">
+        <h2 id="patch-heading">Preview a JSON Patch</h2>
+        <div class="patch-file-actions">
+          <button class="button subtle" type="button" id="import-patch">↑ Import .jsonpatch</button>
+          <button class="button subtle" type="button" id="import-checkpoint-bundle">↑ Import checkpoint bundle</button>
+          <input id="checkpoint-bundle-file" type="file" accept=".json,application/json" hidden>
+          <div class="failure-import-control">
+            <label for="failure-import-mode">Failure replay</label>
+            <select id="failure-import-mode">
+              <option value="isolated">Isolated failed operation</option>
+              <option value="full">Full prefix through failure</option>
+            </select>
+            <button class="button subtle" type="button" id="import-failure-bundle">↑ Import failure bundle</button>
+            <button class="button subtle" type="button" id="verify-imported-failure" disabled>Verify imported failure</button>
+          </div>
+          <input id="failure-bundle-file" type="file" accept=".json,application/json" hidden>
+          <input id="patch-file" type="file" accept=".jsonpatch,.json,application/json" hidden>
+          <button class="button subtle" type="button" id="import-verification-evidence">↑ Open saved evidence</button>
+          <input id="verification-evidence-file" type="file" accept=".json,application/json" hidden>
+          <button class="button subtle" type="button" id="use-generated" disabled>Use generated patch</button>
+        </div>
+      </div>
+      <p class="hint" id="imported-failure-status" role="status" aria-live="polite">Import a failure bundle before verifying it.</p>
+      <section class="failure-verification-results" id="failure-verification-results" aria-labelledby="failure-verification-heading" hidden>
+        <div class="section-heading">
+          <h3 id="failure-verification-heading">Imported failure evidence</h3>
+          <div class="result-actions">
+            <button class="button subtle" id="copy-failure-verification" type="button" disabled>Copy verification JSON</button>
+            <button class="button subtle" id="download-failure-verification-json" type="button" disabled>↓ Verification JSON</button>
+            <button class="button subtle" id="download-failure-verification-csv" type="button" disabled>↓ Checkpoint diff CSV</button>
+            <button class="button subtle" id="download-verification-evidence" type="button" disabled>↓ Portable evidence</button>
+          </div>
+        </div>
+        <p class="hint">Compares the last successful checkpoint independently replayed from the original source against the checkpoint stored in the imported bundle. JSON exports include all recorded verification outcomes; CSV exports include the complete recorded checkpoint differences, not the active filter or page.</p>
+        <p class="hint" id="verification-evidence-context"></p>
+        <p class="failure-verification-summary" id="failure-verification-summary" role="status" aria-live="polite"></p>
+        <div class="failure-verification-filters" role="group" aria-label="Filter checkpoint verification differences">
+          <label for="failure-verification-path">JSON path contains</label>
+          <input type="search" id="failure-verification-path" placeholder="e.g. $.items" autocomplete="off">
+          <label for="failure-verification-type">Difference type</label>
+          <select id="failure-verification-type">
+            <option value="all">All types</option>
+            <option value="added">Added in stored checkpoint</option>
+            <option value="removed">Missing in stored checkpoint</option>
+            <option value="changed">Different values</option>
+          </select>
+        </div>
+        <div class="results-scroll">
+          <table class="diff-table">
+            <thead><tr><th scope="col">JSON path</th><th scope="col">Recomputed</th><th scope="col">Stored in bundle</th></tr></thead>
+            <tbody id="failure-verification-rows"></tbody>
+          </table>
+        </div>
+        <nav class="results-nav" id="failure-verification-nav" aria-label="Checkpoint verification pages" hidden>
+          <button class="button subtle" type="button" id="failure-verification-previous">Previous page</button>
+          <span id="failure-verification-page-summary" aria-live="polite"></span>
+          <button class="button subtle" type="button" id="failure-verification-next">Next page</button>
+        </nav>
+      </section>
+      <section class="evidence-comparison-workspace" aria-labelledby="evidence-compare-heading">
+        <h3 id="evidence-compare-heading">Compare saved verification evidence</h3>
+        <p class="hint">Compare two offline evidence files to locate changes in the stored failure metadata, verdicts and checkpoint differences. A descriptive drift assessment distinguishes newly reproduced failures, failures no longer reproduced and changed checkpoint evidence. This examines archived claims only; it does not replay a patch or verify either file's origin.</p>
+        <div class="evidence-compare-inputs">
+          <label for="evidence-baseline-file">Baseline evidence (earlier)</label>
+          <input id="evidence-baseline-file" type="file" accept=".json,application/json">
+          <label for="evidence-candidate-file">Candidate evidence (later)</label>
+          <input id="evidence-candidate-file" type="file" accept=".json,application/json">
+          <button class="button subtle" id="compare-evidence-archives" type="button">Compare saved evidence</button>
+        </div>
+        <p id="evidence-compare-status" class="status" role="status" aria-live="polite">Choose two evidence archives to compare.</p>
+        <section id="evidence-comparison-results" aria-labelledby="evidence-comparison-results-heading" hidden>
+          <div class="section-heading">
+            <h4 id="evidence-comparison-results-heading">Recorded differences</h4>
+            <div class="result-actions">
+              <button class="button subtle" type="button" id="copy-evidence-comparison" disabled>Copy full comparison</button>
+              <button class="button subtle" type="button" id="download-evidence-comparison-json" disabled>↓ Comparison JSON</button>
+              <button class="button subtle" type="button" id="download-evidence-comparison-csv" disabled>↓ Comparison CSV</button>
+            </div>
+          </div>
+          <p class="evidence-assessment" id="evidence-assessment" role="status" aria-live="polite"></p>
+          <p class="evidence-assessment-details" id="evidence-assessment-details"></p>
+          <p class="evidence-comparison-summary" id="evidence-comparison-summary" role="status" aria-live="polite"></p>
+          <div class="evidence-compare-filters" role="group" aria-label="Filter differences between saved evidence">
+            <label for="evidence-comparison-path">Report path contains</label>
+            <input type="search" id="evidence-comparison-path" placeholder="e.g. $.findings" autocomplete="off">
+            <label for="evidence-comparison-type">Difference type</label>
+            <select id="evidence-comparison-type">
+              <option value="all">All types</option>
+              <option value="added">Added</option>
+              <option value="removed">Removed</option>
+              <option value="changed">Changed</option>
+            </select>
+            <label for="evidence-comparison-scope">Area</label>
+            <select id="evidence-comparison-scope">
+              <option value="all">All areas</option>
+              <option value="metadata">Failure metadata</option>
+              <option value="findings">Reproduction findings</option>
+              <option value="checkpoint">Checkpoint differences</option>
+              <option value="other">Other changes</option>
+            </select>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">Evidence report path</th><th scope="col">Baseline</th><th scope="col">Candidate</th></tr></thead>
+              <tbody id="evidence-comparison-rows"></tbody>
+            </table>
+          </div>
+          <nav class="results-nav" id="evidence-comparison-nav" aria-label="Saved evidence comparison pages" hidden>
+            <button class="button subtle" id="evidence-comparison-previous" type="button">Previous page</button>
+            <span id="evidence-comparison-page-summary" aria-live="polite"></span>
+            <button class="button subtle" id="evidence-comparison-next" type="button">Next page</button>
+          </nav>
+        </section>
+      </section>
+      <section class="evidence-history-workspace" aria-labelledby="evidence-history-heading">
+        <h3 id="evidence-history-heading">Review saved evidence history</h3>
+        <p class="hint">Select 2–10 verification evidence JSON archives. Files are sorted lexicographically by filename (for example, prefix with YYYY-MM-DD), not by file timestamps or selection order. Compare consecutive archives or every later file against the first baseline; use Inspect comparison to open full recorded differences with filters and local exports. Different failure cases are flagged, and snapshots are grouped by recorded failure identity to distinguish revisited cases from changes to other operations. Recurring evidence change paths are ranked across the comparisons. No patch is executed.</p>
+        <div class="evidence-history-inputs">
+          <label for="evidence-history-files">Saved evidence files</label>
+          <input id="evidence-history-files" type="file" multiple accept=".json,application/json">
+          <label for="evidence-history-mode">Comparison</label>
+          <select id="evidence-history-mode">
+            <option value="adjacent">Consecutive archives</option>
+            <option value="baseline">Every archive vs first baseline</option>
+          </select>
+          <button class="button subtle" id="run-evidence-history" type="button">Analyze evidence history</button>
+        </div>
+        <p class="status" id="evidence-history-status" role="status" aria-live="polite">Select 2–10 saved verification evidence files.</p>
+        <div id="evidence-history-results" hidden>
+          <div class="section-heading">
+            <h4 id="evidence-history-table-title">Consecutive evidence transitions</h4>
+            <div class="result-actions">
+              <button class="button subtle" id="copy-evidence-history" type="button" disabled>Copy history</button>
+              <button class="button subtle" id="download-evidence-history-json" type="button" disabled>↓ History JSON</button>
+              <button class="button subtle" id="download-evidence-history-csv" type="button" disabled>↓ History CSV</button>
+            </div>
+          </div>
+          <p id="evidence-history-summary" role="status" aria-live="polite"></p>
+          <div class="evidence-history-filter">
+            <label for="evidence-history-filter">Transition classification</label>
+            <select id="evidence-history-filter">
+              <option value="all">All transitions</option>
+              <option value="newly-reproduced">Newly reproduced</option>
+              <option value="no-longer-reproduced">No longer reproduced</option>
+              <option value="behavioral-drift">Behavioral drift</option>
+              <option value="checkpoint-drift">Checkpoint drift</option>
+              <option value="metadata-only">Metadata only</option>
+              <option value="different-failure-case">Different failure identity</option>
+              <option value="unchanged">Unchanged</option>
+            </select>
+            <label for="evidence-history-case-filter">Failure identity</label>
+            <select id="evidence-history-case-filter" disabled>
+              <option value="all">All failure identities</option>
+            </select>
+          </div>
+          <div class="evidence-history-custom" role="group" aria-label="Compare any two loaded history snapshots">
+            <p class="hint">Compare any two loaded files in filename order, including nonadjacent snapshots. This opens a separate detail report; it does not change the history mode, transition summaries, or exports.</p>
+            <div class="evidence-history-custom-controls">
+              <label for="evidence-history-custom-from">Earlier snapshot</label>
+              <select id="evidence-history-custom-from" disabled></select>
+              <label for="evidence-history-custom-to">Later snapshot</label>
+              <select id="evidence-history-custom-to" disabled></select>
+              <button class="button subtle" id="compare-evidence-history-custom" type="button" disabled>Compare chosen snapshots</button>
+            </div>
+            <p id="evidence-history-custom-status" class="hint" role="status" aria-live="polite">Analyze an archive history to select snapshots.</p>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">Baseline file</th><th scope="col">Candidate file</th><th scope="col">Classification</th><th scope="col">Reported status</th><th scope="col">Failure identity</th><th scope="col">Changes</th><th scope="col">Inspect comparison</th></tr></thead>
+              <tbody id="evidence-history-rows"></tbody>
+            </table>
+          </div>
+
+          <section class="evidence-case-inventory" id="evidence-history-cases" aria-labelledby="evidence-history-cases-heading" hidden>
+            <div class="section-heading">
+              <h4 id="evidence-history-cases-heading">Recorded failure identities</h4>
+              <button class="button subtle" id="download-evidence-cases-csv" type="button" disabled>↓ Cases CSV</button>
+            </div>
+            <p class="hint">Groups snapshots by the source and failed operation index/type/path/from; a case may reappear after other cases. Focus history includes comparisons touching that case, with cross-case boundaries clearly labeled. First vs last inspects the earliest and latest saved snapshots of that same identity, even when separated by other cases. View case progression compares every pair of consecutive appearances of that identity and shows any intervening other-case files.</p>
+            <p id="evidence-history-cases-summary" role="status" aria-live="polite"></p>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Case</th><th scope="col">Failed operation identity</th><th scope="col">Snapshots</th><th scope="col">Reproduced claims</th><th scope="col">Runs</th><th scope="col">First / last file</th><th scope="col">Explore</th></tr></thead>
+                <tbody id="evidence-history-cases-rows"></tbody>
+              </table>
+            </div>
+            <section class="evidence-case-progression" id="evidence-case-progression" aria-labelledby="evidence-case-progression-heading" hidden>
+              <div class="section-heading">
+                <h5 id="evidence-case-progression-heading">Selected failure case progression</h5>
+                <button class="button subtle" id="download-evidence-case-progression-csv" type="button" disabled>↓ Case progression CSV</button>
+              </div>
+              <p class="hint">Connects consecutive appearances of the same recorded failed-operation identity, even when other failures appear between them. Unlike the main history mode, each comparison is within one case. These are archived claims, not independently verified executions.</p>
+              <p id="evidence-case-progression-summary" role="status" aria-live="polite"></p>
+              <div class="results-scroll">
+                <table class="diff-table">
+                  <thead><tr><th scope="col">Earlier case file</th><th scope="col">Later case file</th><th scope="col">Other-case files between</th><th scope="col">Recorded drift</th><th scope="col">Reproduction status</th><th scope="col">Changes</th><th scope="col">Inspect</th></tr></thead>
+                  <tbody id="evidence-case-progression-rows"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+          <section class="evidence-hotspots" id="evidence-history-hotspots" aria-labelledby="evidence-hotspots-heading" hidden>
+            <div class="section-heading">
+              <h4 id="evidence-hotspots-heading">Recurring evidence change paths</h4>
+              <button class="button subtle" id="download-evidence-hotspots-csv" type="button" disabled>↓ Hotspots CSV</button>
+            </div>
+            <p class="hint">Ranks normalized evidence report paths by the number of comparisons in which they changed. Checkpoint before/after subfields are grouped into their source path and change type. Counts describe saved evidence, not live JSON mutations. Use View path history to inspect every comparison in which the path was recorded, or Inspect latest change for the most recent one.</p>
+            <p id="evidence-history-hotspots-summary" role="status" aria-live="polite"></p>
+            <div class="evidence-hotspots-filters">
+              <label for="evidence-history-hotspots-scope">Evidence area</label>
+              <select id="evidence-history-hotspots-scope">
+                <option value="all">All areas</option>
+                <option value="metadata">Metadata</option>
+                <option value="findings">Findings</option>
+                <option value="checkpoint">Checkpoint</option>
+                <option value="other">Other</option>
+              </select>
+              <label for="evidence-history-hotspots-path">Path contains</label>
+              <input id="evidence-history-hotspots-path" type="search" autocomplete="off" placeholder="e.g. $.findings">
+            </div>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Normalized evidence path</th><th scope="col">Area</th><th scope="col">Comparisons affected</th><th scope="col">Occurrences</th><th scope="col">Inspect</th></tr></thead>
+                <tbody id="evidence-history-hotspots-rows"></tbody>
+              </table>
+            </div>
+            <section class="evidence-hotspot-timeline" id="evidence-hotspot-timeline" aria-labelledby="evidence-hotspot-timeline-heading" hidden>
+              <div class="section-heading">
+                <h5 id="evidence-hotspot-timeline-heading">Selected path history</h5>
+                <button class="button subtle" id="download-evidence-hotspot-timeline-csv" type="button" disabled>↓ Path timeline CSV</button>
+              </div>
+              <p id="evidence-hotspot-timeline-summary" role="status" aria-live="polite"></p>
+              <p class="hint">Shows each archived comparison in which the selected evidence path changed. Open a comparison to inspect the original recorded values; no patch is run.</p>
+              <div class="results-scroll">
+                <table class="diff-table">
+                  <thead><tr><th scope="col">#</th><th scope="col">Earlier file</th><th scope="col">Later file</th><th scope="col">Drift classification</th><th scope="col">Occurrences</th><th scope="col">Inspect</th></tr></thead>
+                  <tbody id="evidence-hotspot-timeline-rows"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+          <section class="evidence-history-detail" id="evidence-history-detail" aria-labelledby="evidence-history-detail-heading" hidden>
+            <div class="section-heading">
+              <h4 id="evidence-history-detail-heading">Selected snapshot comparison</h4>
+              <div class="result-actions">
+                <button class="button subtle" id="copy-evidence-history-detail" type="button" disabled>Copy full detail</button>
+                <button class="button subtle" id="download-evidence-history-detail-json" type="button" disabled>↓ Detail JSON</button>
+                <button class="button subtle" id="download-evidence-history-detail-csv" type="button" disabled>↓ Detail CSV</button>
+              </div>
+            </div>
+            <p class="hint">Shows the selected saved-evidence pair: adjacent, first baseline or custom snapshots. It is not a fresh replay, independent authentication, or proof of a regression.</p>
+            <p class="evidence-history-detail-summary" id="evidence-history-detail-summary" role="status" aria-live="polite"></p>
+            <div class="evidence-history-detail-filters" role="group" aria-label="Filter selected transition detail">
+              <label for="evidence-history-detail-path">Report path contains</label>
+              <input id="evidence-history-detail-path" type="search" placeholder="e.g. $.findings" autocomplete="off">
+              <label for="evidence-history-detail-type">Difference type</label>
+              <select id="evidence-history-detail-type">
+                <option value="all">All types</option>
+                <option value="added">Added</option>
+                <option value="removed">Removed</option>
+                <option value="changed">Changed</option>
+              </select>
+              <label for="evidence-history-detail-scope">Area</label>
+              <select id="evidence-history-detail-scope">
+                <option value="all">All areas</option>
+                <option value="metadata">Failure metadata</option>
+                <option value="findings">Reproduction findings</option>
+                <option value="checkpoint">Checkpoint differences</option>
+                <option value="other">Other changes</option>
+              </select>
+            </div>
+            <div class="results-scroll">
+              <table class="diff-table">
+                <thead><tr><th scope="col">Evidence path</th><th scope="col">Earlier archive</th><th scope="col">Later archive</th></tr></thead>
+                <tbody id="evidence-history-detail-rows"></tbody>
+              </table>
+            </div>
+            <nav class="results-nav" id="evidence-history-detail-nav" aria-label="History transition detail pages" hidden>
+              <button class="button subtle" id="evidence-history-detail-previous" type="button">Previous page</button>
+              <span id="evidence-history-detail-page-summary" aria-live="polite"></span>
+              <button class="button subtle" id="evidence-history-detail-next" type="button">Next page</button>
+            </nav>
+          </section>
+        </div>
+      </section>
+      <p class="hint">Paste a JSON Patch array, import a local .jsonpatch/.json file, or use the patch generated above. Choose the source editor for the preview. A reverse generated patch uses <strong>After</strong> as its source automatically. The preview is detached: neither document changes until you explicitly send the result to the opposite editor.</p>
+      <div class="patch-base-control">
+        <label for="patch-base">Apply patch to a copy of</label>
+        <select id="patch-base">
+          <option value="before">Before</option>
+          <option value="after">After</option>
+        </select>
+      </div>
+      <div class="editors">
+        <div class="editor">
+          <label for="patch-source">Patch operations (add, remove, replace, test, copy, move)</label>
+          <textarea id="patch-source" rows="9" spellcheck="false" placeholder='[{"op":"replace","path":"/version","value":2}]'></textarea>
+        </div>
+        <div class="editor">
+          <label for="patch-result">Resulting JSON (read-only)</label>
+          <textarea id="patch-result" rows="9" readonly spellcheck="false" placeholder="The resulting document will appear here after preview."></textarea>
+        </div>
+      </div>
+      <div class="patch-inspection-actions">
+        <button class="button subtle" type="button" id="inspect-patch">Inspect patch operations</button>
+        <span class="hint">Read-only inspection of operation order, paths and value previews. Does not apply a patch.</span>
+      </div>
+      <section class="patch-inspection" id="patch-inspection" aria-labelledby="inspection-heading" hidden>
+        <h3 id="inspection-heading">Patch operation ledger</h3>
+        <p class="hint">Basic shape warnings are not full validation. Choose View step on an operation to inspect its intermediate result and structural effect. The detached preview checks actual paths, values and ordering.</p>
+        <p class="inspection-summary" id="inspection-summary" role="status" aria-live="polite"></p>
+        <div class="inspection-filters" role="group" aria-label="Filter patch operations">
+          <label for="inspection-type">Operation</label>
+          <select id="inspection-type">
+            <option value="all">All operations</option>
+            <option value="test">test</option>
+            <option value="add">add</option>
+            <option value="remove">remove</option>
+            <option value="replace">replace</option>
+            <option value="copy">copy</option>
+            <option value="move">move</option>
+            <option value="(invalid)">Invalid type</option>
+          </select>
+          <label for="inspection-path">Path or from contains</label>
+          <input type="search" id="inspection-path" placeholder="/settings" autocomplete="off">
+        </div>
+        <div class="results-scroll">
+          <table class="diff-table inspection-table">
+            <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Path</th><th scope="col">From</th><th scope="col">Value preview</th><th scope="col">Shape warnings</th><th scope="col">Preview</th></tr></thead>
+            <tbody id="inspection-rows"></tbody>
+          </table>
+        </div>
+        <nav class="results-nav" id="inspection-nav" aria-label="Patch operation pages" hidden>
+          <button class="button subtle" type="button" id="inspection-previous">Previous page</button>
+          <span id="inspection-page-summary" aria-live="polite"></span>
+          <button class="button subtle" type="button" id="inspection-next">Next page</button>
+        </nav>
+      </section>
+      <section class="patch-step-review" aria-labelledby="patch-step-heading">
+        <h3 id="patch-step-heading">Step-by-step patch preview</h3>
+        <p class="hint">Preview the document after the first N instructions, including 0 for the unchanged source. This runs on a detached copy and does not apply later operations.</p>
+        <div class="patch-step-controls">
+          <label for="patch-step-count">Operations to apply</label>
+          <input id="patch-step-count" type="number" min="0" max="5000" step="1" value="1">
+          <button class="button subtle" type="button" id="patch-step-preview">Preview through step</button>
+          <button class="button subtle" type="button" id="patch-step-previous" disabled>Previous step</button>
+          <button class="button subtle" type="button" id="patch-step-next" disabled>Next step</button>
+        </div>
+        <div class="step-export-actions">
+          <button class="button subtle" id="copy-patch-step" type="button" disabled>Copy step JSON</button>
+          <button class="button subtle" id="download-patch-step" type="button" disabled>↓ Download step JSON</button>
+        </div>
+        <label class="patch-step-result-label" for="patch-step-result">Document at selected step (read-only)</label>
+        <textarea id="patch-step-result" rows="7" readonly spellcheck="false" placeholder="Preview a step to inspect the intermediate document."></textarea>
+        <p class="status" id="patch-step-status" role="status" aria-live="polite">Select a step and preview the detached document.</p>
+        <section class="patch-step-impact" id="patch-step-impact" aria-labelledby="patch-step-impact-heading" hidden>
+          <div class="section-heading">
+            <h4 id="patch-step-impact-heading">Effect of this operation</h4>
+            <div class="result-actions">
+              <button class="button subtle" id="copy-step-impact" type="button" disabled>Copy step impact</button>
+              <button class="button subtle" id="download-step-impact-json" type="button" disabled>↓ Step impact JSON</button>
+              <button class="button subtle" id="download-step-impact-csv" type="button" disabled>↓ Step impact CSV</button>
+            </div>
+          </div>
+          <p class="hint">Structural changes caused by the selected operation only, comparing the document just before and just after that instruction. Exports include all recorded changes even when the table has multiple pages.</p>
+          <p class="step-impact-summary" id="patch-step-impact-summary" role="status" aria-live="polite"></p>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">JSON path</th><th scope="col">Previous step</th><th scope="col">Selected step</th></tr></thead>
+              <tbody id="patch-step-impact-rows"></tbody>
+            </table>
+          </div>
+          <nav class="results-nav" id="patch-step-impact-nav" aria-label="Step change pages" hidden>
+            <button class="button subtle" type="button" id="patch-step-impact-previous">Previous page</button>
+            <span id="patch-step-impact-page-summary" aria-live="polite"></span>
+            <button class="button subtle" type="button" id="patch-step-impact-next">Next page</button>
+          </nav>
+        </section>
+      </section>
+      <section class="patch-range-review" aria-labelledby="range-heading">
+        <h3 id="range-heading">Compare two patch steps</h3>
+        <p class="hint">Compare the document after step A with the document after step B. Both checkpoints replay the same source from the beginning. Only the net changes between A and B are shown; operations after B are not run.</p>
+        <div class="patch-range-controls">
+          <label for="range-start">From step</label>
+          <input id="range-start" type="number" min="0" max="5000" step="1" value="0">
+          <label for="range-end">To step</label>
+          <input id="range-end" type="number" min="0" max="5000" step="1" value="1">
+          <button class="button subtle" type="button" id="range-preview">Compare steps</button>
+        </div>
+        <p class="status" id="range-status" role="status" aria-live="polite">Choose two steps to compare their cumulative effect.</p>
+        <section id="range-results" aria-labelledby="range-results-heading" hidden>
+          <div class="section-heading">
+            <h4 id="range-results-heading">Changes between checkpoints</h4>
+            <div class="result-actions">
+              <button class="button subtle" type="button" id="copy-range" disabled>Copy full range report</button>
+              <button class="button subtle" type="button" id="download-range-json" disabled>↓ Range JSON</button>
+              <button class="button subtle" type="button" id="download-range-csv" disabled>↓ Range CSV</button>
+            </div>
+          </div>
+          <p class="hint">Report exports contain all recorded differences, regardless of filters or pages.</p>
+          <p class="range-summary" id="range-summary" role="status" aria-live="polite"></p>
+          <div class="range-patch-export" role="group" aria-label="Generate a patch from checkpoint states">
+            <label for="range-guard-patch">
+              <input type="checkbox" id="range-guard-patch">
+              Add <code>test</code> guards to checkpoint patch
+            </label>
+            <button class="button subtle" type="button" id="copy-range-patch" disabled>Copy checkpoint JSON Patch</button>
+            <button class="button subtle" type="button" id="download-range-patch" disabled>↓ Checkpoint .jsonpatch</button>
+          </div>
+          <div class="range-checkpoint-exports" role="group" aria-label="Export complete checkpoint documents">
+            <div class="checkpoint-export-group">
+              <span class="checkpoint-export-title">Start checkpoint (patch input)</span>
+              <button class="button subtle" type="button" id="copy-range-start" disabled>Copy start JSON</button>
+              <button class="button subtle" type="button" id="download-range-start" disabled>↓ Download start JSON</button>
+            </div>
+            <div class="checkpoint-export-group">
+              <span class="checkpoint-export-title">End checkpoint (expected result)</span>
+              <button class="button subtle" type="button" id="copy-range-end" disabled>Copy end JSON</button>
+              <button class="button subtle" type="button" id="download-range-end" disabled>↓ Download end JSON</button>
+            </div>
+          </div>
+          <div class="range-bundle-export">
+            <button class="button subtle" type="button" id="download-range-bundle" disabled>↓ Download checkpoint bundle</button>
+            <span class="hint">One local JSON file containing both checkpoints and the generated patch.</span>
+          </div>
+          <p class="hint range-patch-warning">The generated patch transforms the document at the start checkpoint into the end checkpoint. It is <strong>not</strong> necessarily valid against the original document; the generated operations may differ from the selected portion of the input patch.</p>
+          <p class="range-patch-status" id="range-patch-status" role="status" aria-live="polite"></p>
+          <div class="range-filters" role="group" aria-label="Filter checkpoint differences">
+            <label for="range-filter-path">JSON path contains</label>
+            <input id="range-filter-path" type="search" placeholder="e.g. $.settings" autocomplete="off">
+            <label for="range-filter-type">Change type</label>
+            <select id="range-filter-type">
+              <option value="all">All types</option>
+              <option value="added">Added</option>
+              <option value="removed">Removed</option>
+              <option value="changed">Changed</option>
+            </select>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">JSON path</th><th scope="col">From step</th><th scope="col">To step</th></tr></thead>
+              <tbody id="range-rows"></tbody>
+            </table>
+          </div>
+          <nav class="results-nav" id="range-nav" aria-label="Checkpoint difference pages" hidden>
+            <button class="button subtle" type="button" id="range-previous">Previous page</button>
+            <span id="range-page-summary" aria-live="polite"></span>
+            <button class="button subtle" type="button" id="range-next">Next page</button>
+          </nav>
+        </section>
+      </section>
+      <div class="actions">
+        <button class="button primary" type="button" id="preview-patch">Preview applying patch</button>
+        <button class="button subtle" type="button" id="send-result" disabled>Send result to After</button>
+        <button class="button subtle" type="button" id="download-result" disabled>↓ Download result.json</button>
+      </div>
+      <p id="patch-status" class="status" role="status" aria-live="polite">This tool does not execute code or upload JSON.</p>
+      <section id="patch-failure" class="patch-failure-review" aria-labelledby="patch-failure-heading" hidden>
+        <h3 id="patch-failure-heading">Failed operation diagnosis</h3>
+        <p class="patch-failure-summary" id="patch-failure-summary" role="status" aria-live="polite"></p>
+        <p class="hint patch-failure-operation" id="patch-failure-operation"></p>
+        <label class="patch-failure-label" for="patch-failure-checkpoint">Last successful document (read-only)</label>
+        <textarea id="patch-failure-checkpoint" rows="7" spellcheck="false" readonly placeholder="Last successful state is not available."></textarea>
+        <p class="hint" id="patch-failure-note"></p>
+        <div class="actions">
+          <button class="button subtle" id="copy-failure-checkpoint" type="button" disabled>Copy last good JSON</button>
+          <button class="button subtle" id="download-failure-checkpoint" type="button" disabled>↓ Download last good JSON</button>
+          <button class="button subtle" id="open-failure-step" type="button" disabled>Inspect last good step</button>
+        </div>
+        <div class="failure-repro-actions" role="group" aria-label="Failure reproduction and isolation">
+          <button class="button subtle" id="copy-failure-bundle" type="button" disabled>Copy failure bundle</button>
+          <button class="button subtle" id="download-failure-bundle" type="button" disabled>↓ Download failure bundle</button>
+          <button class="button subtle" id="isolate-failure" type="button" disabled>Isolate failed operation</button>
+        </div>
+        <p class="hint">The reproduction bundle contains the <strong>complete original JSON</strong>, instructions through the failure and last good checkpoint. It may contain sensitive data: review before sharing. Isolating a failure replaces the selected source and patch editors only after confirmation; no patch runs automatically.</p>
+      </section>
+      <section class="patch-expected-review" aria-labelledby="expected-heading">
+        <div class="section-heading">
+          <h3 id="expected-heading">Compare patch result with expected document</h3>
+          <button class="button subtle" type="button" id="verify-expected" disabled>Compare with opposite editor</button>
+        </div>
+        <p class="hint">After Preview applying patch, compare the detached result to the opposite document editor. A checkpoint bundle places its expected result in After. This is an explicit read-only action: importing a patch or bundle does not execute it.</p>
+        <p id="expected-status" class="status" role="status" aria-live="polite">Preview the patch before comparing its result with the opposite editor.</p>
+        <div id="expected-results" hidden>
+          <div class="section-heading">
+            <h4>Expected-result differences</h4>
+            <div class="result-actions">
+              <button class="button subtle" type="button" id="copy-expected" disabled>Copy full mismatch report</button>
+              <button class="button subtle" type="button" id="download-expected-json" disabled>↓ Mismatch JSON</button>
+              <button class="button subtle" type="button" id="download-expected-csv" disabled>↓ Mismatch CSV</button>
+            </div>
+          </div>
+          <p class="expected-summary" id="expected-summary" role="status" aria-live="polite"></p>
+          <div class="expected-filters" role="group" aria-label="Filter expected-result differences">
+            <label for="expected-filter-path">JSON path contains</label>
+            <input type="search" id="expected-filter-path" placeholder="e.g. $.items" autocomplete="off">
+            <label for="expected-filter-type">Difference type</label>
+            <select id="expected-filter-type">
+              <option value="all">All types</option>
+              <option value="added">Missing from result</option>
+              <option value="removed">Unexpected in result</option>
+              <option value="changed">Different values</option>
+            </select>
+          </div>
+          <div class="results-scroll">
+            <table class="diff-table">
+              <thead><tr><th scope="col">JSON path</th><th scope="col">Patch result</th><th scope="col">Expected editor</th></tr></thead>
+              <tbody id="expected-rows"></tbody>
+            </table>
+          </div>
+          <nav class="results-nav" id="expected-nav" aria-label="Expected-result difference pages" hidden>
+            <button class="button subtle" type="button" id="expected-previous">Previous page</button>
+            <span id="expected-page-summary" aria-live="polite"></span>
+            <button class="button subtle" type="button" id="expected-next">Next page</button>
+          </nav>
+        </div>
+      </section>
+      <section class="patch-impact" id="patch-impact" aria-labelledby="impact-heading" hidden>
+        <div class="section-heading">
+          <h3 id="impact-heading">Patch impact review</h3>
+          <div class="result-actions">
+            <button class="button subtle" type="button" id="copy-impact" disabled>Copy full impact report</button>
+            <button class="button subtle" type="button" id="download-impact-json" disabled>↓ Impact JSON</button>
+            <button class="button subtle" type="button" id="download-impact-csv" disabled>↓ Impact CSV</button>
+          </div>
+        </div>
+        <p class="hint">Changes between the selected source and the detached preview, not the patch instruction list. The original JSON editors are unchanged. JSON/CSV exports use every recorded change, not only visible rows.</p>
+        <p class="impact-summary" id="impact-summary" role="status" aria-live="polite"></p>
+        <div class="impact-filters" role="group" aria-label="Filter patch impact">
+          <label for="impact-filter-path">JSON path contains</label>
+          <input type="search" id="impact-filter-path" placeholder="e.g. $.items" autocomplete="off">
+          <label for="impact-filter-type">Type</label>
+          <select id="impact-filter-type">
+            <option value="all">All types</option>
+            <option value="added">Added</option>
+            <option value="removed">Removed</option>
+            <option value="changed">Changed</option>
+          </select>
+        </div>
+        <div class="results-scroll">
+          <table class="diff-table">
+            <thead><tr><th scope="col">JSON path</th><th scope="col">Source</th><th scope="col">Preview</th></tr></thead>
+            <tbody id="impact-rows"></tbody>
+          </table>
+        </div>
+        <nav class="results-nav" id="impact-nav" aria-label="Patch impact pages" hidden>
+          <button class="button subtle" type="button" id="impact-previous">Previous page</button>
+          <span id="impact-page-summary" aria-live="polite"></span>
+          <button class="button subtle" type="button" id="impact-next">Next page</button>
+        </nav>
+      </section>
+    </section>
+    <aside class="note">
+      <h2>How comparison works</h2>
+      <p>Object properties are compared by key and arrays by position. Values and types are compared exactly. Large added or removed structures appear as one change; the visual report describes changes; a separate JSON Patch export generates forward or reverse RFC 6902 add/remove/replace operations, optionally preceded by test assertions on removed and replaced values.</p>
+      <p>Maximum file or editor input: 2 MiB per side. The comparison stops after 5,000 differences to protect your browser from oversized reports. Results are displayed 100 at a time and may be filtered by JSON path and change type; exported reports still include all recorded changes. Patch export refuses results exceeding 5,000 operations rather than creating a partial patch. The read-only operation ledger shows patch instructions and basic shape warnings before application. The step-by-step preview can show the intermediate document and structural effect after any selected operation without executing later instructions. An inspector row opens that step directly. Comparing two checkpoints shows the net structural effect of all operations between their step numbers, with local JSON/CSV reports, downloadable start/end checkpoint documents, and a separately generated RFC 6902 checkpoint patch that can include test guards. A portable checkpoint bundle can be exported and imported as one local JSON file; importing populates Before, After and the patch editor with confirmation but never applies the patch automatically. After a user-triggered preview, the expected-result comparison shows whether the detached patch result structurally matches the opposite editor, including any mismatched paths. The patch preview supports RFC 6902 add/remove/replace/test/copy/move operations on a separate copy, with a separate filterable impact report that can be copied in full without changing either editor. A failed test or invalid source/destination aborts the preview; the failing operation is identified and the last successful intermediate document can be inspected separately when within limits. A portable failure bundle or isolated one-operation reproduction can be created on demand and imported later, choosing the full prefix or the failed operation alone. Import never executes the patch automatically; a separate Verify imported failure action replays it on detached copies, checks the stored checkpoint and failure position, and provides a filterable checkpoint mismatch report with local JSON/CSV exports. Portable verification evidence can be saved and reopened for read-only review; opening saved evidence never replays a patch and must not be mistaken for a new verification. Two saved evidence archives can be compared offline to inspect changes in their recorded findings, without claiming a fresh replay. A history of 2–10 saved archives can also be reviewed in filename order to summarize consecutive transitions without executing patches. Move uses removal-before-insertion array indexes; removing the root is unsupported.</p>
+    </aside>
+  </main>
+  <footer class="container footer">Open source · <a href="https://github.com/MeiRR17/json-diff-view">View on GitHub</a> · Built by <a href="https://github.com/MeiRR17">Meir Dvir</a></footer>
+</body>
+</html>
